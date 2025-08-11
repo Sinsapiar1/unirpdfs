@@ -57,6 +57,20 @@ async function renderPreviews() {
         const img = document.createElement('img');
         img.src = canvas.toDataURL();
         div.appendChild(img);
+
+        // Añadir metadatos visuales: nombre de archivo y conteo de páginas
+        const meta = document.createElement('div');
+        meta.classList.add('preview-meta');
+        const nameEl = document.createElement('div');
+        nameEl.classList.add('file-name');
+        nameEl.textContent = file.name;
+        const pagesEl = document.createElement('div');
+        pagesEl.classList.add('file-pages');
+        pagesEl.textContent = `${pdf.numPages} páginas`;
+        meta.appendChild(nameEl);
+        meta.appendChild(pagesEl);
+        div.appendChild(meta);
+
         previewContainer.appendChild(div);
     }
 }
@@ -64,6 +78,8 @@ async function renderPreviews() {
 mergeBtn.addEventListener('click', async () => {
     if (pdfFiles.length < 2) return;
     statusText.textContent = 'Uniendo PDFs...';
+    statusText.classList.add('loading');
+    statusText.setAttribute('aria-busy', 'true');
     mergeBtn.disabled = true;
 
     const mergedPdf = await PDFLib.PDFDocument.create();
@@ -83,4 +99,6 @@ mergeBtn.addEventListener('click', async () => {
     downloadLink.download = 'pdf_unido.pdf';
     downloadLink.style.display = 'block';
     statusText.textContent = '¡Listo! Descarga tu PDF unido.';
+    statusText.classList.remove('loading');
+    statusText.removeAttribute('aria-busy');
 });

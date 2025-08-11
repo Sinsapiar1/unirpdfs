@@ -5,10 +5,16 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
     <title>Unir PDFs - 100% Client-Side</title>
     <link rel="stylesheet" href="style.css" />
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <meta name="color-scheme" content="light dark">
+    <meta name="theme-color" content="#1f3b69">
 </head>
 <body>
     <div class="container">
         <h1>Unir PDFs</h1>
+        <p class="subtitle">Rápido, privado y 100% en tu navegador</p>
 
         <div id="drop-area" class="drop-area">
             <p>Arrastra y suelta tus PDFs aquí o <label for="fileElem" class="file-label">haz clic para seleccionarlos</label></p>
@@ -20,7 +26,7 @@
         <button id="mergeBtn" class="btn" disabled>Unir PDFs</button>
         <a id="downloadLink" class="btn download-btn" style="display:none">Descargar PDF Unido</a>
 
-        <div id="status" class="status"></div>
+        <div id="status" class="status" aria-live="polite"></div>
     </div>
 
     <!-- PDF.js para vistas previas -->
