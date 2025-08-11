@@ -5,14 +5,35 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
     <title>Unir PDFs - 100% Client-Side</title>
     <link rel="stylesheet" href="style.css" />
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <meta name="color-scheme" content="light dark">
+    <meta name="theme-color" content="#1f3b69">
+    <!-- Google tag (gtag.js) -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-B57X87P265"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+
+  gtag('config', 'G-B57X87P265');
+</script>
 </head>
 <body>
     <div class="container">
         <h1>Unir PDFs</h1>
+        <p class="subtitle">Rápido, privado y 100% en tu navegador</p>
 
         <div id="drop-area" class="drop-area">
             <p>Arrastra y suelta tus PDFs aquí o <label for="fileElem" class="file-label">haz clic para seleccionarlos</label></p>
             <input type="file" id="fileElem" multiple accept="application/pdf" />
+        </div>
+
+        <div class="actions">
+            <button id="addFileBtn" type="button" class="btn secondary">Agregar archivo</button>
+            <button id="addAnotherFileBtn" type="button" class="btn ghost">Agregar otro archivo</button>
+            <input type="file" id="fileElem2" multiple accept="application/pdf" hidden />
         </div>
 
         <div id="preview-container" class="preview-container"></div>
@@ -20,7 +41,11 @@
         <button id="mergeBtn" class="btn" disabled>Unir PDFs</button>
         <a id="downloadLink" class="btn download-btn" style="display:none">Descargar PDF Unido</a>
 
-        <div id="status" class="status"></div>
+        <div id="status" class="status" aria-live="polite"></div>
+
+        <footer class="app-footer">
+            Creada por <strong>Raul Jaime Pivet</strong>, con amor para los usuarios que visitan mi Indeed. <span aria-hidden="true">❤️</span>
+        </footer>
     </div>
 
     <!-- PDF.js para vistas previas -->
@@ -31,3 +56,4 @@
     <script src="script.js"></script>
 </body>
 </html>
+
