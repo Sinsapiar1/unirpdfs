@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>Unir PDFs - 100% Client-Side</title>
+    <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+    <div class="container">
+        <h1>Unir PDFs</h1>
+
+        <div id="drop-area" class="drop-area">
+            <p>Arrastra y suelta tus PDFs aquí o <label for="fileElem" class="file-label">haz clic para seleccionarlos</label></p>
+            <input type="file" id="fileElem" multiple accept="application/pdf" />
+        </div>
+
+        <div id="preview-container" class="preview-container"></div>
+
+        <button id="mergeBtn" class="btn" disabled>Unir PDFs</button>
+        <a id="downloadLink" class="btn download-btn" style="display:none">Descargar PDF Unido</a>
+
+        <div id="status" class="status"></div>
+    </div>
+
+    <!-- PDF.js para vistas previas -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <!-- pdf-lib para unir PDFs -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
+    <!-- Nuestro script -->
+    <script src="script.js"></script>
+</body>
+</html>
