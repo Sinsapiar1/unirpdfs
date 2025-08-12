@@ -76,77 +76,57 @@ self.onmessage = async function(e) {
     }
 };
 
-// Función para análisis diagnóstico mejorado
-function analyzeDiagnosticInfo(error) {
-    const errorStr = error.toString();
-    const diagnostic = {
-        category: 'unknown',
-        severity: 'medium',
-        recommendation: 'Intenta con archivos más pequeños',
-        technicalDetails: errorStr,
-        hybridSolution: ''
-    };
-    
-    if (errorStr.includes('páginas. Máximo permitido')) {
-        diagnostic.category = 'page_limit';
-        diagnostic.severity = 'high';
-        diagnostic.recommendation = 'Divide el archivo en partes más pequeñas (máximo 300 páginas por archivo)';
-        diagnostic.hybridSolution = 'A diferencia de iLovePDF (que usa servidores), tu navegador tiene límites de memoria. Divide el PDF en partes de ~150 páginas.';
-    } else if (errorStr.includes('demasiado grande') && errorStr.includes('MB')) {
-        diagnostic.category = 'file_size';
-        diagnostic.severity = 'high';
-        diagnostic.recommendation = 'Reduce el tamaño del archivo (máximo 100MB por archivo)';
-        diagnostic.hybridSolution = 'iLovePDF procesa en servidores con RAM ilimitada. En tu navegador, usa archivos < 100MB para mejor rendimiento.';
-    } else if (errorStr.includes('Total de páginas') && errorStr.includes('excede')) {
-        diagnostic.category = 'total_pages';
-        diagnostic.severity = 'high';
-        diagnostic.recommendation = 'Reduce el número total de páginas a procesar (máximo 400 páginas en total)';
-        diagnostic.hybridSolution = 'Los servidores de iLovePDF pueden procesar miles de páginas. En el navegador, limítate a ~400 páginas totales.';
-    } else if (errorStr.includes('out of memory') || errorStr.includes('Maximum call stack')) {
-        diagnostic.category = 'memory';
-        diagnostic.severity = 'critical';
-        diagnostic.recommendation = 'Cierra todas las demás pestañas y reinicia el navegador';
-        diagnostic.hybridSolution = 'iLovePDF usa 32GB+ de RAM en servidores. Tu navegador tiene ~2GB de RAM disponible. Libera memoria cerrando pestañas.';
+    // Función para análisis diagnóstico
+    function analyzeDiagnosticInfo(error) {
+        const errorStr = error.toString();
+        const diagnostic = {
+            category: 'unknown',
+            severity: 'medium',
+            recommendation: 'Intenta con archivos más pequeños',
+            technicalDetails: errorStr
+        };
+        
+        if (errorStr.includes('páginas. Máximo permitido')) {
+            diagnostic.category = 'page_limit';
+            diagnostic.severity = 'high';
+            diagnostic.recommendation = 'Divide el archivo en partes más pequeñas (máximo 300 páginas por archivo)';
+        } else if (errorStr.includes('demasiado grande') && errorStr.includes('MB')) {
+            diagnostic.category = 'file_size';
+            diagnostic.severity = 'high';
+            diagnostic.recommendation = 'Reduce el tamaño del archivo (máximo 100MB por archivo)';
+        } else if (errorStr.includes('Total de páginas') && errorStr.includes('excede')) {
+            diagnostic.category = 'total_pages';
+            diagnostic.severity = 'high';
+            diagnostic.recommendation = 'Reduce el número total de páginas a procesar (máximo 400 páginas en total)';
+        } else if (errorStr.includes('out of memory') || errorStr.includes('Maximum call stack')) {
+            diagnostic.category = 'memory';
+            diagnostic.severity = 'critical';
+            diagnostic.recommendation = 'Cierra otras pestañas del navegador y reinicia la aplicación';
+        }
+        
+        return diagnostic;
     }
-    
-    return diagnostic;
-}
 
-// Función de mensajes de error con comparación iLovePDF
+// Función de mensajes de error sin comparación iLovePDF
 function getDetailedErrorMessage(error) {
     const errorStr = error.toString();
     
     if (errorStr.includes('páginas. Máximo permitido')) {
         const match = errorStr.match(/tiene (\d+) páginas.*Máximo permitido: (\d+)/);
         if (match) {
-            return `❌ LÍMITE DE PÁGINAS EXCEDIDO: Tu archivo tiene ${match[1]} páginas.
-            
-🏢 iLovePDF: Procesa en servidores con recursos ilimitados
-🌐 Tu app: Limitada por la memoria del navegador (máximo ${match[2]} páginas)
-
-💡 Solución: Divide tu PDF en partes de ~150 páginas cada una.`;
+            return `❌ LÍMITE DE PÁGINAS EXCEDIDO: El archivo tiene ${match[1]} páginas, pero el máximo permitido es ${match[2]} páginas por archivo.`;
         }
     }
     
     if (errorStr.includes('demasiado grande') && errorStr.includes('MB')) {
         const match = errorStr.match(/(\d+\.?\d*)MB.*Máximo: (\d+)MB/);
         if (match) {
-            return `❌ ARCHIVO MUY GRANDE: Tu archivo pesa ${match[1]}MB.
-            
-🏢 iLovePDF: Servidores con almacenamiento y RAM masivos
-🌐 Tu app: Limitada por la memoria del navegador (máximo ${match[2]}MB)
-
-💡 Solución: Comprime el PDF o divídelo en archivos más pequeños.`;
+            return `❌ ARCHIVO MUY GRANDE: El archivo pesa ${match[1]}MB, pero el máximo permitido es ${match[2]}MB.`;
         }
     }
     
     if (errorStr.includes('out of memory')) {
-        return `❌ SIN MEMORIA: Tu navegador se quedó sin memoria.
-        
-🏢 iLovePDF: Servidores con 32GB+ de RAM
-🌐 Tu app: Tu navegador tiene ~2GB de RAM disponible
-
-💡 Solución: Cierra todas las demás pestañas, reinicia el navegador, usa archivos más pequeños.`;
+        return `❌ SIN MEMORIA: Tu navegador se quedó sin memoria. Cierra otras pestañas e intenta con archivos más pequeños.`;
     }
     
     return `❌ ERROR: ${error.message || error}`;
@@ -238,16 +218,16 @@ class StreamingPDFProcessor {
 
 // Función principal de merge híbrido
 async function mergePDFsHybrid({ files, progressCallback = true }) {
-    // Diagnóstico previo con límites híbridos
-    if (progressCallback) {
-        self.postMessage({
-            type: 'PROGRESS',
-            stage: 'diagnosing',
-            current: 0,
-            total: 1,
-            message: '🩺 Diagnóstico híbrido: Analizando capacidades vs iLovePDF...'
-        });
-    }
+         // Diagnóstico previo
+     if (progressCallback) {
+         self.postMessage({
+             type: 'PROGRESS',
+             stage: 'diagnosing',
+             current: 0,
+             total: 1,
+             message: 'Realizando diagnóstico de archivos...'
+         });
+     }
     
     await diagnoseFiles({ files });
     
@@ -268,7 +248,7 @@ async function mergePDFsHybrid({ files, progressCallback = true }) {
                     stage: 'analyzing',
                     current: i,
                     total: files.length,
-                    message: `Analizando archivo ${i + 1}/${files.length} (modo híbrido)...`
+                                         message: `Analizando archivo ${i + 1} de ${files.length}...`
                 });
             }
             
@@ -277,10 +257,10 @@ async function mergePDFsHybrid({ files, progressCallback = true }) {
             
             totalPages += pageCount;
             
-            // Verificar límites híbridos
-            if (totalPages > HYBRID_LIMITS.TOTAL_PAGES.MAX) {
-                throw new Error(`too many pages: Total de páginas (${totalPages}) excede el límite híbrido (${HYBRID_LIMITS.TOTAL_PAGES.MAX})`);
-            }
+                         // Verificar límites totales
+             if (totalPages > HYBRID_LIMITS.TOTAL_PAGES.MAX) {
+                 throw new Error(`too many pages: Total de páginas (${totalPages}) excede el límite máximo (${HYBRID_LIMITS.TOTAL_PAGES.MAX})`);
+             }
             
             pdfDocs.push(pdf);
             fileAnalysis.push({ 
@@ -323,19 +303,23 @@ async function mergePDFsHybrid({ files, progressCallback = true }) {
     
     processor.totalPages = totalPages;
     
-    // Información sobre el procesamiento híbrido
+    // Información sobre el procesamiento sin comparaciones
     if (progressCallback) {
         const encryptedCount = fileAnalysis.filter(f => f.encrypted).length;
         const corruptedCount = fileAnalysis.filter(f => f.corrupted).length;
         const imageConvertedCount = fileAnalysis.filter(f => f.method === 'pdf.js').length;
         
-        let warningMsg = `🔄 MODO HÍBRIDO: Procesando ${totalPages} páginas con estrategia ${strategy.strategy.toUpperCase()}. `;
+        let warningMsg = `Procesando ${totalPages} páginas con estrategia ${strategy.strategy.toUpperCase()}. `;
         
         if (imageConvertedCount > 0) {
             warningMsg += `${imageConvertedCount} archivo(s) convertidos con streaming. `;
         }
-        
-        warningMsg += `📊 Comparación: iLovePDF (servidor) vs Tu app (híbrida optimizada).`;
+        if (encryptedCount > 0) {
+            warningMsg += `${encryptedCount} archivo(s) encriptados procesados. `;
+        }
+        if (corruptedCount > 0) {
+            warningMsg += `${corruptedCount} archivo(s) reparados. `;
+        }
         
         self.postMessage({
             type: 'WARNING',
@@ -365,7 +349,7 @@ async function mergePDFsHybrid({ files, progressCallback = true }) {
                     processedPages++;
                 }
                 
-                // Progreso y limpieza de memoria
+                // Progreso sin referencias a iLovePDF
                 if (progressCallback && pageNum % batchSize === 0) {
                     const percentage = Math.round((processedPages / totalPages) * 100);
                     self.postMessage({
@@ -374,7 +358,7 @@ async function mergePDFsHybrid({ files, progressCallback = true }) {
                         current: processedPages,
                         total: totalPages,
                         percentage,
-                        message: `🚀 Streaming híbrido: ${processedPages}/${totalPages} páginas (${percentage}%)`
+                        message: `Procesando páginas: ${processedPages}/${totalPages} (${percentage}%)`
                     });
                 }
                 
@@ -403,7 +387,7 @@ async function mergePDFsHybrid({ files, progressCallback = true }) {
                             current: processedPages,
                             total: totalPages,
                             percentage,
-                            message: `⚡ Procesamiento híbrido: ${processedPages}/${totalPages} páginas (${percentage}%)`
+                            message: `Procesando páginas: ${processedPages}/${totalPages} páginas (${percentage}%)`
                         });
                     }
                     
@@ -426,14 +410,14 @@ async function mergePDFsHybrid({ files, progressCallback = true }) {
         }
     }
     
-    // Guardado final con limpieza
+    // Guardado final sin referencias
     if (progressCallback) {
         self.postMessage({
             type: 'PROGRESS',
             stage: 'saving',
             current: 100,
             total: 100,
-            message: `💾 Generando PDF final híbrido (${processedPages} páginas)...`
+            message: `Generando archivo final con ${processedPages} páginas...`
         });
     }
     
@@ -472,10 +456,10 @@ async function mergePDFsHybrid({ files, progressCallback = true }) {
 // Función para determinar estrategia híbrida
 function determineHybridStrategy(totalPages) {
     if (totalPages > HYBRID_LIMITS.TOTAL_PAGES.MAX) {
-        return {
-            strategy: 'reject',
-            message: `Demasiadas páginas (${totalPages}). Límite híbrido: ${HYBRID_LIMITS.TOTAL_PAGES.MAX}`
-        };
+             return {
+         strategy: 'reject',
+         message: `Demasiadas páginas (${totalPages}). Límite máximo: ${HYBRID_LIMITS.TOTAL_PAGES.MAX}`
+     };
     } else if (totalPages > HYBRID_LIMITS.TOTAL_PAGES.EXTREME) {
         return {
             strategy: 'extreme',
@@ -515,9 +499,9 @@ function determineHybridStrategy(totalPages) {
 // Función de carga con límites híbridos
 async function loadPDFWithHybridLimits(fileBuffer, fileName = '') {
     const fileSizeMB = fileBuffer.byteLength / (1024 * 1024);
-    if (fileSizeMB > HYBRID_LIMITS.FILE_SIZE_MB.MAX) {
-        throw new Error(`Archivo ${fileName} demasiado grande (${fileSizeMB.toFixed(1)}MB). Máximo híbrido: ${HYBRID_LIMITS.FILE_SIZE_MB.MAX}MB`);
-    }
+         if (fileSizeMB > HYBRID_LIMITS.FILE_SIZE_MB.MAX) {
+         throw new Error(`Archivo ${fileName} demasiado grande (${fileSizeMB.toFixed(1)}MB). Máximo: ${HYBRID_LIMITS.FILE_SIZE_MB.MAX}MB`);
+     }
     
     // Intentos de carga optimizados
     const loadAttempts = [
@@ -534,9 +518,9 @@ async function loadPDFWithHybridLimits(fileBuffer, fileName = '') {
             const pdf = await PDFLib.PDFDocument.load(fileBuffer, loadOptions);
             
             const pageCount = pdf.getPageCount();
-            if (pageCount > HYBRID_LIMITS.PAGES_PER_FILE.MAX) {
-                throw new Error(`Documento ${fileName} tiene ${pageCount} páginas. Máximo híbrido: ${HYBRID_LIMITS.PAGES_PER_FILE.MAX}`);
-            }
+                         if (pageCount > HYBRID_LIMITS.PAGES_PER_FILE.MAX) {
+                 throw new Error(`Documento ${fileName} tiene ${pageCount} páginas. Máximo permitido: ${HYBRID_LIMITS.PAGES_PER_FILE.MAX}`);
+             }
             
             return { 
                 pdf, 
@@ -547,12 +531,12 @@ async function loadPDFWithHybridLimits(fileBuffer, fileName = '') {
                 pageCount
             };
             
-        } catch (error) {
-            lastError = error;
-            if (error.message.includes('páginas. Máximo híbrido')) {
-                throw error;
-            }
-        }
+                 } catch (error) {
+             lastError = error;
+             if (error.message.includes('páginas. Máximo permitido')) {
+                 throw error;
+             }
+         }
     }
     
     // Fallback a PDF.js con límites híbridos
@@ -567,9 +551,9 @@ async function loadPDFWithHybridLimits(fileBuffer, fileName = '') {
                 useSystemFonts: false
             }).promise;
             
-            if (pdfDoc.numPages > HYBRID_LIMITS.PAGES_PER_FILE.MAX) {
-                throw new Error(`Documento ${fileName} tiene ${pdfDoc.numPages} páginas. Máximo híbrido: ${HYBRID_LIMITS.PAGES_PER_FILE.MAX}`);
-            }
+                         if (pdfDoc.numPages > HYBRID_LIMITS.PAGES_PER_FILE.MAX) {
+                 throw new Error(`Documento ${fileName} tiene ${pdfDoc.numPages} páginas. Máximo permitido: ${HYBRID_LIMITS.PAGES_PER_FILE.MAX}`);
+             }
             
             return {
                 pdf: pdfDoc,
@@ -580,14 +564,14 @@ async function loadPDFWithHybridLimits(fileBuffer, fileName = '') {
                 pageCount: pdfDoc.numPages
             };
             
-        } catch (pdfjsError) {
-            if (pdfjsError.message.includes('páginas. Máximo híbrido')) {
-                throw pdfjsError;
-            }
-        }
+                 } catch (pdfjsError) {
+             if (pdfjsError.message.includes('páginas. Máximo permitido')) {
+                 throw pdfjsError;
+             }
+         }
     }
     
-    throw new Error(`PDF ${fileName} no se puede procesar con el método híbrido.`);
+         throw new Error(`PDF ${fileName} no se puede procesar.`);
 }
 
 // Función de diagnóstico con límites híbridos
@@ -602,26 +586,24 @@ async function diagnoseFiles({ files }) {
         const fileSizeMB = file.byteLength / (1024 * 1024);
         totalSizeMB += fileSizeMB;
         
-        const diagnosis = {
-            fileIndex: i,
-            fileName: `archivo_${i + 1}`,
-            sizeMB: Math.round(fileSizeMB * 10) / 10,
-            issues: [],
-            warnings: [],
-            canProcess: true,
-            pageCount: 0,
-            memoryEstimate: 0,
-            hybridOptimizations: []
-        };
+                 const diagnosis = {
+             fileIndex: i,
+             fileName: `archivo_${i + 1}`,
+             sizeMB: Math.round(fileSizeMB * 10) / 10,
+             issues: [],
+             warnings: [],
+             canProcess: true,
+             pageCount: 0,
+             memoryEstimate: 0
+         };
         
-        // Verificar límites híbridos
-        if (fileSizeMB > HYBRID_LIMITS.FILE_SIZE_MB.MAX) {
-            diagnosis.issues.push(`Archivo demasiado grande: ${diagnosis.sizeMB}MB (máximo híbrido: ${HYBRID_LIMITS.FILE_SIZE_MB.MAX}MB)`);
-            diagnosis.canProcess = false;
-        } else if (fileSizeMB > HYBRID_LIMITS.FILE_SIZE_MB.LARGE) {
-            diagnosis.warnings.push(`Archivo grande: ${diagnosis.sizeMB}MB. Se usará compresión agresiva.`);
-            diagnosis.hybridOptimizations.push('Compresión JPEG 60%');
-        }
+                 // Verificar límites de tamaño
+         if (fileSizeMB > HYBRID_LIMITS.FILE_SIZE_MB.MAX) {
+             diagnosis.issues.push(`Archivo demasiado grande: ${diagnosis.sizeMB}MB (máximo: ${HYBRID_LIMITS.FILE_SIZE_MB.MAX}MB)`);
+             diagnosis.canProcess = false;
+         } else if (fileSizeMB > HYBRID_LIMITS.FILE_SIZE_MB.LARGE) {
+             diagnosis.warnings.push(`Archivo grande: ${diagnosis.sizeMB}MB. Procesamiento será lento.`);
+         }
         
         try {
             const result = await loadPDFWithHybridLimits(file, diagnosis.fileName);
@@ -632,24 +614,22 @@ async function diagnoseFiles({ files }) {
             
             totalPages += diagnosis.pageCount;
             
-            // Verificar límites de páginas híbridos
-            if (diagnosis.pageCount > HYBRID_LIMITS.PAGES_PER_FILE.MAX) {
-                diagnosis.issues.push(`Demasiadas páginas: ${diagnosis.pageCount} (máximo híbrido: ${HYBRID_LIMITS.PAGES_PER_FILE.MAX})`);
-                diagnosis.canProcess = false;
-            } else if (diagnosis.pageCount > HYBRID_LIMITS.PAGES_PER_FILE.LARGE) {
-                diagnosis.warnings.push(`Muchas páginas: ${diagnosis.pageCount}. Se usará streaming optimizado.`);
-                diagnosis.hybridOptimizations.push('Streaming por lotes de 3 páginas');
-            }
-            
-            // Estimar memoria híbrida
-            const isImageConversion = result.method === 'pdf.js';
-            diagnosis.memoryEstimate = estimateHybridMemoryUsage(file.byteLength, diagnosis.pageCount, isImageConversion);
-            totalMemoryEstimate += diagnosis.memoryEstimate;
-            
-            if (diagnosis.memoryEstimate > HYBRID_LIMITS.MEMORY_ESTIMATE_MB.DANGER) {
-                diagnosis.warnings.push(`Uso de memoria estimado: ${diagnosis.memoryEstimate}MB`);
-                diagnosis.hybridOptimizations.push('Limpieza de memoria cada 10 páginas');
-            }
+                         // Verificar límites de páginas
+             if (diagnosis.pageCount > HYBRID_LIMITS.PAGES_PER_FILE.MAX) {
+                 diagnosis.issues.push(`Demasiadas páginas: ${diagnosis.pageCount} (máximo: ${HYBRID_LIMITS.PAGES_PER_FILE.MAX})`);
+                 diagnosis.canProcess = false;
+             } else if (diagnosis.pageCount > HYBRID_LIMITS.PAGES_PER_FILE.LARGE) {
+                 diagnosis.warnings.push(`Muchas páginas: ${diagnosis.pageCount}. Procesamiento será lento.`);
+             }
+             
+             // Estimar memoria
+             const isImageConversion = result.method === 'pdf.js';
+             diagnosis.memoryEstimate = estimateHybridMemoryUsage(file.byteLength, diagnosis.pageCount, isImageConversion);
+             totalMemoryEstimate += diagnosis.memoryEstimate;
+             
+             if (diagnosis.memoryEstimate > HYBRID_LIMITS.MEMORY_ESTIMATE_MB.DANGER) {
+                 diagnosis.warnings.push(`Alto uso de memoria estimado: ${diagnosis.memoryEstimate}MB`);
+             }
             
         } catch (error) {
             diagnosis.issues.push(`No se puede procesar: ${error.message}`);
@@ -659,43 +639,38 @@ async function diagnoseFiles({ files }) {
         diagnostics.push(diagnosis);
     }
     
-    // Verificar límites totales híbridos
-    const globalIssues = [];
-    const globalWarnings = [];
-    
-    if (totalPages > HYBRID_LIMITS.TOTAL_PAGES.MAX) {
-        globalIssues.push(`Demasiadas páginas totales: ${totalPages} (máximo híbrido: ${HYBRID_LIMITS.TOTAL_PAGES.MAX})`);
-    } else if (totalPages > HYBRID_LIMITS.TOTAL_PAGES.EXTREME) {
-        globalWarnings.push(`Muchas páginas totales: ${totalPages}. Se usará estrategia extrema híbrida.`);
-    }
-    
-    if (totalMemoryEstimate > HYBRID_LIMITS.MEMORY_ESTIMATE_MB.MAX) {
-        globalIssues.push(`Memoria estimada demasiado alta: ${totalMemoryEstimate}MB (máximo híbrido: ${HYBRID_LIMITS.MEMORY_ESTIMATE_MB.MAX}MB)`);
-    }
+         // Verificar límites totales
+     const globalIssues = [];
+     const globalWarnings = [];
+     
+     if (totalPages > HYBRID_LIMITS.TOTAL_PAGES.MAX) {
+         globalIssues.push(`Demasiadas páginas totales: ${totalPages} (máximo: ${HYBRID_LIMITS.TOTAL_PAGES.MAX})`);
+     } else if (totalPages > HYBRID_LIMITS.TOTAL_PAGES.EXTREME) {
+         globalWarnings.push(`Muchas páginas totales: ${totalPages}. Se usará estrategia extrema.`);
+     }
+     
+     if (totalMemoryEstimate > HYBRID_LIMITS.MEMORY_ESTIMATE_MB.MAX) {
+         globalIssues.push(`Memoria estimada demasiado alta: ${totalMemoryEstimate}MB (máximo: ${HYBRID_LIMITS.MEMORY_ESTIMATE_MB.MAX}MB)`);
+     }
     
     const canProcessAll = diagnostics.every(d => d.canProcess) && globalIssues.length === 0;
     
-    self.postMessage({
-        type: 'DIAGNOSTIC_COMPLETE',
-        data: {
-            files: diagnostics,
-            totals: {
-                files: files.length,
-                pages: totalPages,
-                sizeMB: Math.round(totalSizeMB * 10) / 10,
-                memoryEstimateMB: totalMemoryEstimate
-            },
-            globalIssues,
-            globalWarnings,
-            canProcess: canProcessAll,
-            recommendedStrategy: determineHybridStrategy(totalPages).strategy,
-            hybridMode: true,
-            comparisonWithILovePDF: {
-                serverAdvantages: ['RAM ilimitada', 'Procesamiento paralelo', 'Bibliotecas nativas'],
-                hybridSolutions: ['Streaming de memoria', 'Compresión agresiva', 'Limpieza automática']
-            }
-        }
-    });
+             self.postMessage({
+             type: 'DIAGNOSTIC_COMPLETE',
+             data: {
+                 files: diagnostics,
+                 totals: {
+                     files: files.length,
+                     pages: totalPages,
+                     sizeMB: Math.round(totalSizeMB * 10) / 10,
+                     memoryEstimateMB: totalMemoryEstimate
+                 },
+                 globalIssues,
+                 globalWarnings,
+                 canProcess: canProcessAll,
+                 recommendedStrategy: determineHybridStrategy(totalPages).strategy
+             }
+         });
 }
 
 // Función para estimar memoria híbrida
@@ -728,7 +703,7 @@ async function analyzePDF({ fileBuffer, fileName }) {
                 encrypted,
                 corrupted,
                 method,
-                title: method === 'pdf.js' ? 'Procesamiento híbrido' : (pdf.getTitle() || 'Sin título'),
+                                 title: method === 'pdf.js' ? 'Procesamiento optimizado' : (pdf.getTitle() || 'Sin título'),
                 fileSize: fileBuffer.length,
                 canProcess: true
             }
@@ -751,12 +726,12 @@ async function getPDFInfo({ fileBuffer }) {
         const result = await loadPDFWithHybridLimits(fileBuffer);
         const { pdf, encrypted, method, pageCount } = result;
         
-        let title;
-        if (method === 'pdf.js') {
-            title = 'Procesamiento híbrido optimizado';
-        } else {
-            title = pdf.getTitle() || 'Sin título';
-        }
+                     let title;
+             if (method === 'pdf.js') {
+                 title = 'Procesamiento optimizado';
+             } else {
+                 title = pdf.getTitle() || 'Sin título';
+             }
         
         self.postMessage({
             type: 'PDF_INFO',
