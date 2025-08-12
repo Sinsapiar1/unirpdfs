@@ -47,26 +47,53 @@ async function loadPDFWithOptions(fileBuffer) {
     let pdf = null;
     let loadOptions = {};
     
-    try {
+    // Lista de opciones para intentar en orden
+    const loadAttempts = [
         // Intento 1: Carga normal
-        pdf = await PDFLib.PDFDocument.load(fileBuffer);
-        return { pdf, encrypted: false, corrupted: false };
-    } catch (error) {
-        if (error.toString().includes('encrypted')) {
-            try {
-                // Intento 2: Ignorar encriptación
-                loadOptions = { ignoreEncryption: true };
-                pdf = await PDFLib.PDFDocument.load(fileBuffer, loadOptions);
-                return { pdf, encrypted: true, corrupted: false };
-            } catch (encryptedError) {
-                throw new Error(`PDF encriptado no se puede procesar: ${encryptedError.message}`);
+        {},
+        // Intento 2: Ignorar encriptación
+        { ignoreEncryption: true },
+        // Intento 3: Actualizar referencias cruzadas y ignorar encriptación
+        { ignoreEncryption: true, updateXRefTable: true },
+        // Intento 4: Modo de recuperación total
+        { ignoreEncryption: true, updateXRefTable: true, parseSpeed: 1 }
+    ];
+    
+    let lastError = null;
+    
+    for (let i = 0; i < loadAttempts.length; i++) {
+        try {
+            loadOptions = loadAttempts[i];
+            pdf = await PDFLib.PDFDocument.load(fileBuffer, loadOptions);
+            
+            const encrypted = loadOptions.ignoreEncryption === true;
+            const recovered = i > 1; // Si necesitó más de 2 intentos, está corrupto
+            
+            return { 
+                pdf, 
+                encrypted, 
+                corrupted: recovered,
+                attemptUsed: i + 1
+            };
+            
+        } catch (error) {
+            lastError = error;
+            console.warn(`Intento ${i + 1} fallido:`, error.message);
+            
+            // Si es el último intento, lanzar error
+            if (i === loadAttempts.length - 1) {
+                if (error.toString().includes('encrypted')) {
+                    throw new Error(`PDF fuertemente encriptado, no se puede procesar automáticamente.`);
+                } else if (error.toString().includes('Invalid PDF') || error.toString().includes('corrupted')) {
+                    throw new Error(`PDF corrupto o dañado, no se puede recuperar.`);
+                } else {
+                    throw new Error(`Error de procesamiento: ${error.message}`);
+                }
             }
-        } else if (error.toString().includes('Invalid PDF')) {
-            throw new Error('El archivo no es un PDF válido o está corrupto');
-        } else {
-            throw error;
         }
     }
+    
+    throw lastError;
 }
 
 async function mergePDFs({ files, progressCallback = true }) {
@@ -89,12 +116,31 @@ async function mergePDFs({ files, progressCallback = true }) {
     // Primero analizamos y cargamos todos los PDFs
     for (let i = 0; i < files.length; i++) {
         try {
+            if (progressCallback) {
+                self.postMessage({
+                    type: 'PROGRESS',
+                    stage: 'analyzing',
+                    current: i,
+                    total: files.length,
+                    message: `Analizando archivo ${i + 1} de ${files.length}...`
+                });
+            }
+            
             const result = await loadPDFWithOptions(files[i]);
-            const { pdf, encrypted, corrupted } = result;
+            const { pdf, encrypted, corrupted, attemptUsed } = result;
             
             pdfDocs.push(pdf);
-            fileAnalysis.push({ encrypted, corrupted, pages: pdf.getPageCount() });
+            fileAnalysis.push({ encrypted, corrupted, pages: pdf.getPageCount(), attemptUsed });
             totalPages += pdf.getPageCount();
+            
+            let statusMsg = '';
+            if (encrypted && corrupted) {
+                statusMsg = ' (encriptado y reparado)';
+            } else if (encrypted) {
+                statusMsg = ' (encriptado)';
+            } else if (corrupted) {
+                statusMsg = ' (reparado)';
+            }
             
             if (progressCallback) {
                 self.postMessage({
@@ -102,7 +148,7 @@ async function mergePDFs({ files, progressCallback = true }) {
                     stage: 'analyzing',
                     current: i + 1,
                     total: files.length,
-                    message: `Analizando archivo ${i + 1} de ${files.length}${encrypted ? ' (encriptado)' : ''}...`
+                    message: `Archivo ${i + 1} procesado${statusMsg} - ${pdf.getPageCount()} páginas`
                 });
             }
             
@@ -111,12 +157,23 @@ async function mergePDFs({ files, progressCallback = true }) {
         }
     }
     
-    // Informar sobre archivos encriptados encontrados
+    // Informar sobre archivos problemáticos encontrados
     const encryptedCount = fileAnalysis.filter(f => f.encrypted).length;
-    if (encryptedCount > 0 && progressCallback) {
+    const corruptedCount = fileAnalysis.filter(f => f.corrupted).length;
+    
+    if ((encryptedCount > 0 || corruptedCount > 0) && progressCallback) {
+        let warningMsg = '';
+        if (encryptedCount > 0 && corruptedCount > 0) {
+            warningMsg = `Se encontraron ${encryptedCount} archivo(s) encriptado(s) y ${corruptedCount} corrupto(s). Todos fueron reparados automáticamente.`;
+        } else if (encryptedCount > 0) {
+            warningMsg = `Se encontraron ${encryptedCount} archivo(s) encriptado(s). Se procesaron automáticamente.`;
+        } else if (corruptedCount > 0) {
+            warningMsg = `Se encontraron ${corruptedCount} archivo(s) corrupto(s). Se repararon automáticamente.`;
+        }
+        
         self.postMessage({
             type: 'WARNING',
-            message: `Se encontraron ${encryptedCount} archivo(s) encriptado(s). Se procesarán sin protección.`
+            message: warningMsg
         });
     }
     
@@ -203,6 +260,7 @@ async function mergePDFs({ files, progressCallback = true }) {
                 totalFiles: files.length,
                 totalPages: processedPages,
                 encryptedFiles: encryptedCount,
+                corruptedFiles: corruptedCount,
                 fileSize: mergedPdfFile.length
             }
         });

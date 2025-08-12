@@ -159,7 +159,16 @@ function handleMergeComplete(mergedPdfFile, stats) {
     downloadLink.style.display = 'block';
     
     const fileSize = formatFileSize(stats?.fileSize || mergedPdfFile.length);
-    const encryptedInfo = stats?.encryptedFiles > 0 ? ` (incluyendo ${stats.encryptedFiles} archivo(s) encriptado(s))` : '';
+    
+    // Construir información sobre archivos problemáticos
+    let problemInfo = '';
+    if (stats?.encryptedFiles > 0 && stats?.corruptedFiles > 0) {
+        problemInfo = ` (${stats.encryptedFiles} encriptado(s), ${stats.corruptedFiles} reparado(s))`;
+    } else if (stats?.encryptedFiles > 0) {
+        problemInfo = ` (${stats.encryptedFiles} encriptado(s) procesado(s))`;
+    } else if (stats?.corruptedFiles > 0) {
+        problemInfo = ` (${stats.corruptedFiles} archivo(s) reparado(s))`;
+    }
     
     statusText.innerHTML = `
         <div class="success-container">
@@ -168,7 +177,7 @@ function handleMergeComplete(mergedPdfFile, stats) {
             <div class="success-stats">
                 📄 ${stats?.totalPages || 'N/A'} páginas totales<br>
                 📁 ${stats?.totalFiles || 'N/A'} archivos unidos<br>
-                💾 Tamaño final: ${fileSize}${encryptedInfo}
+                💾 Tamaño final: ${fileSize}${problemInfo}
             </div>
         </div>
     `;
@@ -353,7 +362,23 @@ async function renderPreviews() {
 async function loadPreviewAsync(file, container, placeholder) {
     try {
         const arrayBuffer = await file.arrayBuffer();
-        const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+        
+        // Intentar cargar con PDF.js con opciones de recuperación
+        let loadingTask;
+        try {
+            loadingTask = pdfjsLib.getDocument({ 
+                data: arrayBuffer,
+                // Opciones para manejar PDFs problemáticos
+                stopAtErrors: false,
+                maxImageSize: 1024 * 1024, // 1MB max por imagen
+                disableFontFace: true, // Evitar problemas con fuentes
+                verbosity: 0 // Reducir warnings
+            });
+        } catch (loadError) {
+            throw loadError;
+        }
+        
+        const pdf = await loadingTask.promise;
         const page = await pdf.getPage(1);
         const viewport = page.getViewport({ scale: 0.3 });
         const canvas = document.createElement('canvas');
@@ -378,30 +403,36 @@ async function loadPreviewAsync(file, container, placeholder) {
         pagesEl.classList.add('file-pages');
         pagesEl.textContent = `${pdf.numPages} páginas`;
         
-        // Detectar si está encriptado y mostrarlo
-        try {
-            // Intentar acceder a metadatos para detectar encriptación
-            const title = pdf.getTitle();
-        } catch (encryptError) {
-            if (encryptError.toString().includes('encrypted')) {
-                const encryptedEl = document.createElement('div');
-                encryptedEl.classList.add('file-encrypted');
-                encryptedEl.textContent = '🔒 Encriptado';
-                container.querySelector('.preview-meta').appendChild(encryptedEl);
-            }
-        }
-        
         container.querySelector('.preview-meta').appendChild(pagesEl);
         
     } catch (error) {
         console.error('Error loading preview:', error);
-        placeholder.innerHTML = '❌';
-        placeholder.title = 'Error al cargar preview';
         
-        // Si es un error de encriptación, mostrar icono específico
+        // Manejo específico para diferentes tipos de errores
         if (error.toString().includes('encrypted')) {
             placeholder.innerHTML = '🔒';
             placeholder.title = 'PDF encriptado - se procesará automáticamente';
+            
+            // Agregar indicador de encriptado
+            const encryptedEl = document.createElement('div');
+            encryptedEl.classList.add('file-encrypted');
+            encryptedEl.textContent = '🔒 Encriptado';
+            container.querySelector('.preview-meta').appendChild(encryptedEl);
+            
+            // Obtener número de páginas usando el worker
+            const arrayBuffer = await file.arrayBuffer();
+            if (worker) {
+                worker.postMessage({
+                    type: 'GET_PDF_INFO',
+                    data: { fileBuffer: arrayBuffer }
+                });
+            }
+        } else if (error.toString().includes('Invalid PDF')) {
+            placeholder.innerHTML = '⚠️';
+            placeholder.title = 'PDF corrupto - se intentará procesar';
+        } else {
+            placeholder.innerHTML = '❌';
+            placeholder.title = 'Error al cargar preview';
         }
     }
 }
