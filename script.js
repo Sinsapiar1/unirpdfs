@@ -22,17 +22,26 @@ function initWorker() {
     
     worker = new Worker('worker.js');
     worker.onmessage = function(e) {
-        const { type, data, error, stage, current, total, percentage, message } = e.data;
+        const { type, data, error, stage, current, total, percentage, message, stats } = e.data;
         
         switch(type) {
             case 'PROGRESS':
                 updateProgress(stage, current, total, percentage, message);
                 break;
             case 'MERGE_COMPLETE':
-                handleMergeComplete(data);
+                handleMergeComplete(data, stats);
                 break;
             case 'PDF_INFO':
                 handlePDFInfo(data);
+                break;
+            case 'PDF_INFO_ERROR':
+                console.warn('Error getting PDF info:', error);
+                break;
+            case 'PDF_ANALYSIS':
+                handlePDFAnalysis(data);
+                break;
+            case 'WARNING':
+                handleWarning(message);
                 break;
             case 'ERROR':
                 handleError(error);
@@ -49,15 +58,23 @@ function initWorker() {
 // Función para mostrar progreso detallado
 function updateProgress(stage, current, total, percentage, message) {
     let stageText = '';
+    let stageIcon = '';
     switch(stage) {
+        case 'analyzing':
+            stageText = '🔍 Analizando archivos';
+            stageIcon = '🔍';
+            break;
         case 'loading':
             stageText = '📂 Cargando archivos';
+            stageIcon = '📂';
             break;
         case 'merging':
             stageText = '🔄 Uniendo páginas';
+            stageIcon = '🔄';
             break;
         case 'saving':
             stageText = '💾 Generando archivo';
+            stageIcon = '💾';
             break;
     }
     
@@ -79,14 +96,50 @@ function updateProgress(stage, current, total, percentage, message) {
     statusText.setAttribute('aria-busy', 'true');
 }
 
+// Manejo de warnings (nuevo)
+function handleWarning(message) {
+    const warningHTML = `
+        <div class="warning-container">
+            <div class="warning-icon">⚠️</div>
+            <div class="warning-message">${message}</div>
+        </div>
+    `;
+    
+    // Mostrar warning temporalmente sin interrumpir el progreso
+    const tempWarning = document.createElement('div');
+    tempWarning.innerHTML = warningHTML;
+    tempWarning.style.position = 'fixed';
+    tempWarning.style.top = '20px';
+    tempWarning.style.right = '20px';
+    tempWarning.style.zIndex = '1000';
+    tempWarning.style.maxWidth = '300px';
+    document.body.appendChild(tempWarning);
+    
+    setTimeout(() => {
+        document.body.removeChild(tempWarning);
+    }, 5000);
+}
+
 // Manejo de errores mejorado
 function handleError(error) {
     console.error('Error:', error);
+    
+    let errorMessage = error;
+    let suggestion = 'Intenta con archivos más pequeños o reinicia la página';
+    
+    if (error.includes('encriptado')) {
+        suggestion = 'Algunos PDFs están protegidos. La aplicación intentará procesarlos automáticamente.';
+    } else if (error.includes('corrupto')) {
+        suggestion = 'Verifica que todos los archivos sean PDFs válidos y no estén dañados.';
+    } else if (error.includes('grande')) {
+        suggestion = 'Intenta con archivos más pequeños (menos de 100MB cada uno).';
+    }
+    
     statusText.innerHTML = `
         <div class="error-container">
             <div class="error-icon">⚠️</div>
-            <div class="error-message">Error: ${error}</div>
-            <div class="error-suggestion">Intenta con archivos más pequeños o reinicia la página</div>
+            <div class="error-message">Error: ${errorMessage}</div>
+            <div class="error-suggestion">${suggestion}</div>
         </div>
     `;
     statusText.classList.remove('loading');
@@ -96,8 +149,8 @@ function handleError(error) {
     isProcessing = false;
 }
 
-// Completar merge
-function handleMergeComplete(mergedPdfFile) {
+// Completar merge con estadísticas
+function handleMergeComplete(mergedPdfFile, stats) {
     const blob = new Blob([mergedPdfFile], { type: 'application/pdf' });
     const url = URL.createObjectURL(blob);
 
@@ -105,10 +158,18 @@ function handleMergeComplete(mergedPdfFile) {
     downloadLink.download = 'pdf_unido.pdf';
     downloadLink.style.display = 'block';
     
+    const fileSize = formatFileSize(stats?.fileSize || mergedPdfFile.length);
+    const encryptedInfo = stats?.encryptedFiles > 0 ? ` (incluyendo ${stats.encryptedFiles} archivo(s) encriptado(s))` : '';
+    
     statusText.innerHTML = `
         <div class="success-container">
             <div class="success-icon">✅</div>
             <div class="success-message">¡PDF unido exitosamente!</div>
+            <div class="success-stats">
+                📄 ${stats?.totalPages || 'N/A'} páginas totales<br>
+                📁 ${stats?.totalFiles || 'N/A'} archivos unidos<br>
+                💾 Tamaño final: ${fileSize}${encryptedInfo}
+            </div>
         </div>
     `;
     statusText.classList.remove('loading');
@@ -116,6 +177,13 @@ function handleMergeComplete(mergedPdfFile) {
     statusText.removeAttribute('aria-busy');
     mergeBtn.disabled = false;
     isProcessing = false;
+}
+
+// Análisis de PDF individual (nuevo)
+function handlePDFAnalysis(data) {
+    if (!data.canProcess) {
+        console.warn(`Archivo ${data.fileName} no se puede procesar:`, data.error);
+    }
 }
 
 // Eventos drag and drop
@@ -182,9 +250,9 @@ function validateFiles(files) {
             continue;
         }
         
-        // Límite de tamaño por archivo (100MB)
-        if (file.size > 100 * 1024 * 1024) {
-            errors.push(`${file.name}: Archivo demasiado grande (máximo 100MB)`);
+        // Límite de tamaño por archivo aumentado para documentos grandes
+        if (file.size > 200 * 1024 * 1024) { // 200MB
+            errors.push(`${file.name}: Archivo demasiado grande (máximo 200MB)`);
             continue;
         }
         
@@ -309,12 +377,32 @@ async function loadPreviewAsync(file, container, placeholder) {
         const pagesEl = document.createElement('div');
         pagesEl.classList.add('file-pages');
         pagesEl.textContent = `${pdf.numPages} páginas`;
+        
+        // Detectar si está encriptado y mostrarlo
+        try {
+            // Intentar acceder a metadatos para detectar encriptación
+            const title = pdf.getTitle();
+        } catch (encryptError) {
+            if (encryptError.toString().includes('encrypted')) {
+                const encryptedEl = document.createElement('div');
+                encryptedEl.classList.add('file-encrypted');
+                encryptedEl.textContent = '🔒 Encriptado';
+                container.querySelector('.preview-meta').appendChild(encryptedEl);
+            }
+        }
+        
         container.querySelector('.preview-meta').appendChild(pagesEl);
         
     } catch (error) {
         console.error('Error loading preview:', error);
         placeholder.innerHTML = '❌';
         placeholder.title = 'Error al cargar preview';
+        
+        // Si es un error de encriptación, mostrar icono específico
+        if (error.toString().includes('encrypted')) {
+            placeholder.innerHTML = '🔒';
+            placeholder.title = 'PDF encriptado - se procesará automáticamente';
+        }
     }
 }
 

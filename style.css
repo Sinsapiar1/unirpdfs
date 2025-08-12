@@ -413,6 +413,62 @@ h1 {
   font-weight: 500;
 }
 
+/* Estilos para archivos encriptados */
+.file-encrypted {
+  font-size: 9px;
+  color: #f59e0b;
+  font-weight: 600;
+  background: rgba(245, 158, 11, 0.1);
+  padding: 2px 6px;
+  border-radius: 4px;
+  margin-top: 2px;
+}
+
+/* Estadísticas de éxito */
+.success-stats {
+  font-size: 12px;
+  color: var(--muted);
+  margin-top: 8px;
+  line-height: 1.4;
+  text-align: left;
+  background: rgba(34, 197, 94, 0.05);
+  padding: 8px 12px;
+  border-radius: 6px;
+  border: 1px solid rgba(34, 197, 94, 0.1);
+}
+
+/* Notificaciones temporales */
+.temp-warning {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  z-index: 1000;
+  max-width: 300px;
+  animation: slideInRight 0.3s ease-out, slideOutRight 0.3s ease-out 4.7s;
+}
+
+@keyframes slideInRight {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+@keyframes slideOutRight {
+  from {
+    transform: translateX(0);
+    opacity: 1;
+  }
+  to {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+}
+
 /* Mejoras en la zona de drop durante procesamiento */
 .drop-area.processing {
   opacity: 0.6;
