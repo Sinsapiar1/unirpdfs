@@ -162,12 +162,20 @@ function handleMergeComplete(mergedPdfFile, stats) {
     
     // Construir información sobre archivos problemáticos
     let problemInfo = '';
-    if (stats?.encryptedFiles > 0 && stats?.corruptedFiles > 0) {
-        problemInfo = ` (${stats.encryptedFiles} encriptado(s), ${stats.corruptedFiles} reparado(s))`;
-    } else if (stats?.encryptedFiles > 0) {
-        problemInfo = ` (${stats.encryptedFiles} encriptado(s) procesado(s))`;
-    } else if (stats?.corruptedFiles > 0) {
-        problemInfo = ` (${stats.corruptedFiles} archivo(s) reparado(s))`;
+    const issues = [];
+    
+    if (stats?.encryptedFiles > 0) {
+        issues.push(`${stats.encryptedFiles} encriptado(s)`);
+    }
+    if (stats?.corruptedFiles > 0) {
+        issues.push(`${stats.corruptedFiles} reparado(s)`);
+    }
+    if (stats?.imageConvertedFiles > 0) {
+        issues.push(`${stats.imageConvertedFiles} convertido(s) a imágenes`);
+    }
+    
+    if (issues.length > 0) {
+        problemInfo = ` (${issues.join(', ')})`;
     }
     
     statusText.innerHTML = `
