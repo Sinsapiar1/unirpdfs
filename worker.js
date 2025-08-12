@@ -5,6 +5,12 @@ importScripts('https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min
 // Configurar PDF.js
 pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
+// Configuración para documentos masivos
+const MASSIVE_DOCUMENT_THRESHOLD = 500; // páginas
+const EXTREME_DOCUMENT_THRESHOLD = 1000; // páginas
+const MAX_PAGES_PER_DOCUMENT = 2000; // límite absoluto
+const MAX_TOTAL_PAGES = 3000; // límite total del merge
+
 self.onmessage = async function(e) {
     const { type, data } = e.data;
     
@@ -38,101 +44,180 @@ function getErrorMessage(error) {
     } else if (errorStr.includes('Invalid PDF')) {
         return 'Archivo PDF corrupto o inválido detectado.';
     } else if (errorStr.includes('out of memory') || errorStr.includes('Maximum call stack')) {
-        return 'Archivo demasiado grande para procesar. Intenta con archivos más pequeños.';
+        return 'Documento demasiado grande. Aplicando optimizaciones extremas...';
     } else if (errorStr.includes('network') || errorStr.includes('fetch')) {
         return 'Error de conexión. Verifica tu conexión a internet.';
     } else if (errorStr.includes('Expected instance of')) {
         return 'PDF severamente corrupto. Usando método de recuperación alternativo...';
+    } else if (errorStr.includes('too many pages')) {
+        return 'Documento excede límites de procesamiento. Considera dividir el archivo.';
     } else {
         return `Error de procesamiento: ${error.message || error}`;
     }
 }
 
+// Función para determinar estrategia de procesamiento
+function determineProcessingStrategy(totalPages) {
+    if (totalPages > MAX_TOTAL_PAGES) {
+        return {
+            strategy: 'reject',
+            message: `Demasiadas páginas (${totalPages}). Máximo permitido: ${MAX_TOTAL_PAGES}`
+        };
+    } else if (totalPages > EXTREME_DOCUMENT_THRESHOLD) {
+        return {
+            strategy: 'extreme',
+            chunkSize: 1,
+            imageScale: 1.0,
+            maxConcurrent: 1,
+            pauseTime: 100
+        };
+    } else if (totalPages > MASSIVE_DOCUMENT_THRESHOLD) {
+        return {
+            strategy: 'aggressive',
+            chunkSize: 2,
+            imageScale: 1.2,
+            maxConcurrent: 2,
+            pauseTime: 50
+        };
+    } else {
+        return {
+            strategy: 'normal',
+            chunkSize: 5,
+            imageScale: 2.0,
+            maxConcurrent: 3,
+            pauseTime: 10
+        };
+    }
+}
+
 // Función para intentar cargar PDFs con diferentes opciones
-async function loadPDFWithOptions(fileBuffer) {
+async function loadPDFWithOptions(fileBuffer, fileName = '') {
+    // Verificar tamaño del archivo
+    const fileSizeMB = fileBuffer.byteLength / (1024 * 1024);
+    if (fileSizeMB > 300) { // 300MB límite por archivo
+        throw new Error(`Archivo ${fileName} demasiado grande (${fileSizeMB.toFixed(1)}MB). Máximo: 300MB`);
+    }
+    
     // Lista de opciones para intentar en orden
     const loadAttempts = [
         // Intento 1: Carga normal
         {},
         // Intento 2: Ignorar encriptación
         { ignoreEncryption: true },
-        // Intento 3: Actualizar referencias cruzadas y ignorar encriptación
-        { ignoreEncryption: true, updateXRefTable: true },
-        // Intento 4: Modo de recuperación total
-        { ignoreEncryption: true, updateXRefTable: true, parseSpeed: 1 }
+        // Intento 3: Modo rápido + ignorar encriptación
+        { ignoreEncryption: true, updateXRefTable: false, parseSpeed: 2 }
     ];
     
     let lastError = null;
     
+    // Intentar con pdf-lib primero (más rápido para documentos válidos)
     for (let i = 0; i < loadAttempts.length; i++) {
         try {
             const loadOptions = loadAttempts[i];
             const pdf = await PDFLib.PDFDocument.load(fileBuffer, loadOptions);
             
+            const pageCount = pdf.getPageCount();
+            if (pageCount > MAX_PAGES_PER_DOCUMENT) {
+                throw new Error(`Documento ${fileName} tiene ${pageCount} páginas. Máximo permitido: ${MAX_PAGES_PER_DOCUMENT}`);
+            }
+            
             const encrypted = loadOptions.ignoreEncryption === true;
-            const recovered = i > 1;
+            const recovered = i > 0;
             
             return { 
                 pdf, 
                 encrypted, 
                 corrupted: recovered,
                 attemptUsed: i + 1,
-                method: 'pdf-lib'
+                method: 'pdf-lib',
+                pageCount
             };
             
         } catch (error) {
             lastError = error;
-            console.warn(`PDF-lib intento ${i + 1} fallido:`, error.message);
+            console.warn(`PDF-lib intento ${i + 1} fallido para ${fileName}:`, error.message);
+            
+            // Si es error de límite de páginas, no continuar
+            if (error.message.includes('páginas. Máximo permitido')) {
+                throw error;
+            }
         }
     }
     
-    // Si pdf-lib falló completamente, intentar con PDF.js como fallback
-    console.log('PDF-lib falló, intentando con PDF.js...');
-    try {
-        const pdfDoc = await pdfjsLib.getDocument({ 
-            data: fileBuffer,
-            stopAtErrors: false,
-            maxImageSize: 1024 * 1024,
-            disableFontFace: true,
-            verbosity: 0
-        }).promise;
-        
-        return {
-            pdf: pdfDoc,
-            encrypted: false,
-            corrupted: true,
-            attemptUsed: 5,
-            method: 'pdf.js'
-        };
-        
-    } catch (pdfjsError) {
-        console.error('PDF.js también falló:', pdfjsError);
-        throw new Error(`PDF severamente corrupto, no se puede procesar con ningún método.`);
+    // Si pdf-lib falló, intentar con PDF.js (solo para archivos no demasiado grandes)
+    if (fileSizeMB < 100) { // Solo usar PDF.js para archivos < 100MB
+        console.log(`PDF-lib falló para ${fileName}, intentando con PDF.js...`);
+        try {
+            const pdfDoc = await pdfjsLib.getDocument({ 
+                data: fileBuffer,
+                stopAtErrors: false,
+                maxImageSize: 512 * 512, // Reducir límite de imagen
+                disableFontFace: true,
+                verbosity: 0,
+                useSystemFonts: false
+            }).promise;
+            
+            if (pdfDoc.numPages > MAX_PAGES_PER_DOCUMENT) {
+                throw new Error(`Documento ${fileName} tiene ${pdfDoc.numPages} páginas. Máximo permitido: ${MAX_PAGES_PER_DOCUMENT}`);
+            }
+            
+            return {
+                pdf: pdfDoc,
+                encrypted: false,
+                corrupted: true,
+                attemptUsed: 4,
+                method: 'pdf.js',
+                pageCount: pdfDoc.numPages
+            };
+            
+        } catch (pdfjsError) {
+            console.error(`PDF.js también falló para ${fileName}:`, pdfjsError);
+            if (pdfjsError.message.includes('páginas. Máximo permitido')) {
+                throw pdfjsError;
+            }
+        }
     }
+    
+    throw new Error(`PDF ${fileName} no se puede procesar con ningún método disponible.`);
 }
 
-// Función para convertir página de PDF.js a imagen y luego a PDF-lib
-async function convertPdfjsPageToPdflib(pdfDoc, pageNum, targetPdf) {
+// Función optimizada para convertir página de PDF.js a imagen
+async function convertPdfjsPageToPdflib(pdfDoc, pageNum, targetPdf, scale = 1.0) {
     try {
         const page = await pdfDoc.getPage(pageNum);
-        const viewport = page.getViewport({ scale: 2.0 }); // Escala más alta para mejor calidad
+        const viewport = page.getViewport({ scale });
         
-        // Crear canvas para renderizar
+        // Limitar tamaño máximo de canvas
+        const maxDimension = 2048;
+        let finalScale = scale;
+        if (viewport.width > maxDimension || viewport.height > maxDimension) {
+            finalScale = Math.min(maxDimension / viewport.width, maxDimension / viewport.height);
+            viewport = page.getViewport({ scale: finalScale });
+        }
+        
+        // Crear canvas optimizado
         const canvas = new OffscreenCanvas(viewport.width, viewport.height);
-        const context = canvas.getContext('2d');
+        const context = canvas.getContext('2d', { 
+            alpha: false,
+            desynchronized: true
+        });
         
-        // Renderizar página
+        // Renderizar página con optimizaciones
         await page.render({
             canvasContext: context,
-            viewport: viewport
+            viewport: viewport,
+            intent: 'print' // Mejor para documentos
         }).promise;
         
-        // Convertir canvas a blob
-        const blob = await canvas.convertToBlob({ type: 'image/png' });
+        // Convertir a JPEG para menor tamaño (mejor para documentos grandes)
+        const blob = await canvas.convertToBlob({ 
+            type: 'image/jpeg', 
+            quality: 0.8 
+        });
         const imageBytes = await blob.arrayBuffer();
         
-        // Crear página en PDF-lib con la imagen
-        const image = await targetPdf.embedPng(imageBytes);
+        // Crear página en PDF-lib
+        const image = await targetPdf.embedJpg(imageBytes);
         const newPage = targetPdf.addPage([viewport.width, viewport.height]);
         newPage.drawImage(image, {
             x: 0,
@@ -165,7 +250,7 @@ async function mergePDFs({ files, progressCallback = true }) {
         });
     }
     
-    // Primero analizamos y cargamos todos los PDFs
+    // Análisis previo para calcular páginas totales
     for (let i = 0; i < files.length; i++) {
         try {
             if (progressCallback) {
@@ -178,18 +263,17 @@ async function mergePDFs({ files, progressCallback = true }) {
                 });
             }
             
-            const result = await loadPDFWithOptions(files[i]);
-            const { pdf, encrypted, corrupted, attemptUsed, method } = result;
+            const result = await loadPDFWithOptions(files[i], `archivo_${i + 1}`);
+            const { pdf, encrypted, corrupted, attemptUsed, method, pageCount } = result;
             
-            pdfDocs.push(pdf);
+            totalPages += pageCount;
             
-            let pageCount;
-            if (method === 'pdf.js') {
-                pageCount = pdf.numPages;
-            } else {
-                pageCount = pdf.getPageCount();
+            // Verificar límite total antes de continuar
+            if (totalPages > MAX_TOTAL_PAGES) {
+                throw new Error(`too many pages: Total de páginas (${totalPages}) excede el límite máximo (${MAX_TOTAL_PAGES})`);
             }
             
+            pdfDocs.push(pdf);
             fileAnalysis.push({ 
                 encrypted, 
                 corrupted, 
@@ -197,7 +281,6 @@ async function mergePDFs({ files, progressCallback = true }) {
                 attemptUsed, 
                 method 
             });
-            totalPages += pageCount;
             
             let statusMsg = '';
             if (method === 'pdf.js') {
@@ -225,22 +308,28 @@ async function mergePDFs({ files, progressCallback = true }) {
         }
     }
     
-    // Informar sobre archivos problemáticos encontrados
+    // Determinar estrategia de procesamiento
+    const strategy = determineProcessingStrategy(totalPages);
+    if (strategy.strategy === 'reject') {
+        throw new Error(strategy.message);
+    }
+    
+    // Informar sobre archivos problemáticos y estrategia
     const encryptedCount = fileAnalysis.filter(f => f.encrypted).length;
     const corruptedCount = fileAnalysis.filter(f => f.corrupted).length;
     const imageConvertedCount = fileAnalysis.filter(f => f.method === 'pdf.js').length;
     
-    if ((encryptedCount > 0 || corruptedCount > 0 || imageConvertedCount > 0) && progressCallback) {
-        let warningMsg = '';
+    if (progressCallback) {
+        let warningMsg = `Procesando ${totalPages} páginas con estrategia ${strategy.strategy.toUpperCase()}. `;
+        
         if (imageConvertedCount > 0) {
-            warningMsg = `${imageConvertedCount} archivo(s) severamente corrupto(s) convertido(s) a imágenes. `;
+            warningMsg += `${imageConvertedCount} archivo(s) severamente corrupto(s) convertido(s) a imágenes. `;
         }
-        if (encryptedCount > 0 && corruptedCount > 0) {
-            warningMsg += `${encryptedCount} archivo(s) encriptado(s) y ${corruptedCount} corrupto(s) procesados automáticamente.`;
-        } else if (encryptedCount > 0) {
-            warningMsg += `${encryptedCount} archivo(s) encriptado(s) procesados automáticamente.`;
-        } else if (corruptedCount > 0) {
-            warningMsg += `${corruptedCount} archivo(s) corrupto(s) reparados automáticamente.`;
+        if (encryptedCount > 0) {
+            warningMsg += `${encryptedCount} archivo(s) encriptado(s) procesados. `;
+        }
+        if (corruptedCount > 0) {
+            warningMsg += `${corruptedCount} archivo(s) reparados. `;
         }
         
         self.postMessage({
@@ -255,13 +344,11 @@ async function mergePDFs({ files, progressCallback = true }) {
             stage: 'loading',
             current: files.length,
             total: files.length,
-            message: `Todos los archivos analizados. Total: ${totalPages} páginas`
+            message: `Iniciando procesamiento ${strategy.strategy} de ${totalPages} páginas...`
         });
     }
     
-    // Ahora procesamos página por página con chunks adaptativos
-    const adaptiveChunkSize = totalPages > 1000 ? 3 : totalPages > 500 ? 5 : 10;
-    
+    // Procesamiento con estrategia adaptativa
     for (let i = 0; i < pdfDocs.length; i++) {
         const pdf = pdfDocs[i];
         const analysis = fileAnalysis[i];
@@ -269,28 +356,41 @@ async function mergePDFs({ files, progressCallback = true }) {
         const method = analysis.method;
         
         if (method === 'pdf.js') {
-            // Procesar archivo PDF.js página por página
+            // Procesar archivo PDF.js página por página con optimizaciones extremas
+            const batchSize = strategy.strategy === 'extreme' ? 5 : 10;
+            
             for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
                 try {
-                    const success = await convertPdfjsPageToPdflib(pdf, pageNum, mergedPdf);
+                    const success = await convertPdfjsPageToPdflib(
+                        pdf, 
+                        pageNum, 
+                        mergedPdf, 
+                        strategy.imageScale
+                    );
                     if (success) {
                         processedPages++;
                     }
                     
-                    if (progressCallback && pageNum % 5 === 0) {
+                    if (progressCallback && pageNum % batchSize === 0) {
+                        const percentage = Math.round((processedPages / totalPages) * 100);
                         self.postMessage({
                             type: 'PROGRESS',
                             stage: 'merging',
                             current: processedPages,
                             total: totalPages,
-                            percentage: Math.round((processedPages / totalPages) * 100),
-                            message: `Convirtiendo imágenes: ${processedPages} de ${totalPages}`
+                            percentage,
+                            message: `Convirtiendo imágenes (${strategy.strategy}): ${processedPages} de ${totalPages}`
                         });
                     }
                     
-                    // Pausa para no saturar la memoria
-                    if (pageNum % 10 === 0) {
-                        await new Promise(resolve => setTimeout(resolve, 50));
+                    // Pausa adaptativa para gestión de memoria
+                    if (pageNum % batchSize === 0) {
+                        await new Promise(resolve => setTimeout(resolve, strategy.pauseTime));
+                        
+                        // Forzar garbage collection en documentos extremos
+                        if (strategy.strategy === 'extreme' && pageNum % 50 === 0) {
+                            await new Promise(resolve => setTimeout(resolve, 200));
+                        }
                     }
                     
                 } catch (pageError) {
@@ -298,11 +398,11 @@ async function mergePDFs({ files, progressCallback = true }) {
                 }
             }
         } else {
-            // Procesar archivo PDF-lib normalmente
+            // Procesar archivo PDF-lib con chunks adaptativos
             const pageIndices = pdf.getPageIndices();
             
-            for (let j = 0; j < pageIndices.length; j += adaptiveChunkSize) {
-                const chunk = pageIndices.slice(j, Math.min(j + adaptiveChunkSize, pageIndices.length));
+            for (let j = 0; j < pageIndices.length; j += strategy.chunkSize) {
+                const chunk = pageIndices.slice(j, Math.min(j + strategy.chunkSize, pageIndices.length));
                 
                 try {
                     const copiedPages = await mergedPdf.copyPages(pdf, chunk);
@@ -310,18 +410,18 @@ async function mergePDFs({ files, progressCallback = true }) {
                     processedPages += chunk.length;
                     
                     if (progressCallback) {
+                        const percentage = Math.round((processedPages / totalPages) * 100);
                         self.postMessage({
                             type: 'PROGRESS',
                             stage: 'merging',
                             current: processedPages,
                             total: totalPages,
-                            percentage: Math.round((processedPages / totalPages) * 100),
-                            message: `Procesando páginas: ${processedPages} de ${totalPages}${isEncrypted ? ' (archivo encriptado)' : ''}`
+                            percentage,
+                            message: `Procesando páginas (${strategy.strategy}): ${processedPages} de ${totalPages}${isEncrypted ? ' (encriptado)' : ''}`
                         });
                     }
                     
-                    const pauseTime = totalPages > 1000 ? 15 : totalPages > 500 ? 10 : 5;
-                    await new Promise(resolve => setTimeout(resolve, pauseTime));
+                    await new Promise(resolve => setTimeout(resolve, strategy.pauseTime));
                     
                 } catch (chunkError) {
                     console.warn(`Error procesando chunk en archivo ${i + 1}:`, chunkError);
@@ -351,11 +451,19 @@ async function mergePDFs({ files, progressCallback = true }) {
     }
     
     try {
-        const mergedPdfFile = await mergedPdf.save({
+        // Configuración de guardado optimizada para documentos grandes
+        const saveOptions = {
             useObjectStreams: false,
             addDefaultPage: false,
             objectStreamsThreshold: 0
-        });
+        };
+        
+        // Para documentos extremos, usar compresión adicional
+        if (strategy.strategy === 'extreme') {
+            saveOptions.compress = true;
+        }
+        
+        const mergedPdfFile = await mergedPdf.save(saveOptions);
         
         self.postMessage({
             type: 'MERGE_COMPLETE',
@@ -366,7 +474,8 @@ async function mergePDFs({ files, progressCallback = true }) {
                 encryptedFiles: encryptedCount,
                 corruptedFiles: corruptedCount,
                 imageConvertedFiles: imageConvertedCount,
-                fileSize: mergedPdfFile.length
+                fileSize: mergedPdfFile.length,
+                strategy: strategy.strategy
             }
         });
         
@@ -378,15 +487,8 @@ async function mergePDFs({ files, progressCallback = true }) {
 // Función para analizar un PDF individual
 async function analyzePDF({ fileBuffer, fileName }) {
     try {
-        const result = await loadPDFWithOptions(fileBuffer);
-        const { pdf, encrypted, corrupted, method } = result;
-        
-        let pageCount;
-        if (method === 'pdf.js') {
-            pageCount = pdf.numPages;
-        } else {
-            pageCount = pdf.getPageCount();
-        }
+        const result = await loadPDFWithOptions(fileBuffer, fileName);
+        const { pdf, encrypted, corrupted, method, pageCount } = result;
         
         self.postMessage({
             type: 'PDF_ANALYSIS',
@@ -417,14 +519,12 @@ async function analyzePDF({ fileBuffer, fileName }) {
 async function getPDFInfo({ fileBuffer }) {
     try {
         const result = await loadPDFWithOptions(fileBuffer);
-        const { pdf, encrypted, method } = result;
+        const { pdf, encrypted, method, pageCount } = result;
         
-        let pageCount, title;
+        let title;
         if (method === 'pdf.js') {
-            pageCount = pdf.numPages;
             title = 'Recuperado como imágenes';
         } else {
-            pageCount = pdf.getPageCount();
             title = pdf.getTitle() || 'Sin título';
         }
         

@@ -178,6 +178,17 @@ function handleMergeComplete(mergedPdfFile, stats) {
         problemInfo = ` (${issues.join(', ')})`;
     }
     
+    // Agregar información de estrategia
+    let strategyInfo = '';
+    if (stats?.strategy) {
+        const strategyNames = {
+            'normal': 'Normal',
+            'aggressive': 'Agresiva',
+            'extreme': 'Extrema'
+        };
+        strategyInfo = ` - Estrategia: ${strategyNames[stats.strategy] || stats.strategy}`;
+    }
+    
     statusText.innerHTML = `
         <div class="success-container">
             <div class="success-icon">✅</div>
@@ -185,7 +196,7 @@ function handleMergeComplete(mergedPdfFile, stats) {
             <div class="success-stats">
                 📄 ${stats?.totalPages || 'N/A'} páginas totales<br>
                 📁 ${stats?.totalFiles || 'N/A'} archivos unidos<br>
-                💾 Tamaño final: ${fileSize}${problemInfo}
+                💾 Tamaño final: ${fileSize}${problemInfo}${strategyInfo}
             </div>
         </div>
     `;
