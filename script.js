@@ -44,7 +44,10 @@ function initWorker() {
                 handleWarning(message);
                 break;
             case 'ERROR':
-                handleError(error);
+                handleDetailedError(error, e.data.diagnostic);
+                break;
+            case 'DIAGNOSTIC_COMPLETE':
+                handleDiagnosticResults(data);
                 break;
         }
     };
@@ -60,6 +63,10 @@ function updateProgress(stage, current, total, percentage, message) {
     let stageText = '';
     let stageIcon = '';
     switch(stage) {
+        case 'diagnosing':
+            stageText = '🩺 Diagnosticando archivos';
+            stageIcon = '🩺';
+            break;
         case 'analyzing':
             stageText = '🔍 Analizando archivos';
             stageIcon = '🔍';
@@ -120,26 +127,56 @@ function handleWarning(message) {
     }, 5000);
 }
 
-// Manejo de errores mejorado
-function handleError(error) {
+// Manejo de errores detallado
+function handleDetailedError(error, diagnostic) {
     console.error('Error:', error);
+    console.error('Diagnostic:', diagnostic);
     
-    let errorMessage = error;
-    let suggestion = 'Intenta con archivos más pequeños o reinicia la página';
+    let severityIcon = '⚠️';
+    let severityClass = 'error';
     
-    if (error.includes('encriptado')) {
-        suggestion = 'Algunos PDFs están protegidos. La aplicación intentará procesarlos automáticamente.';
-    } else if (error.includes('corrupto')) {
-        suggestion = 'Verifica que todos los archivos sean PDFs válidos y no estén dañados.';
-    } else if (error.includes('grande')) {
-        suggestion = 'Intenta con archivos más pequeños (menos de 100MB cada uno).';
+    if (diagnostic) {
+        switch(diagnostic.severity) {
+            case 'critical':
+                severityIcon = '🚨';
+                severityClass = 'error critical';
+                break;
+            case 'high':
+                severityIcon = '❌';
+                severityClass = 'error high';
+                break;
+            case 'medium':
+                severityIcon = '⚠️';
+                severityClass = 'error medium';
+                break;
+        }
     }
     
+    const categoryNames = {
+        'page_limit': 'LÍMITE DE PÁGINAS',
+        'file_size': 'TAMAÑO DE ARCHIVO',
+        'total_pages': 'DEMASIADAS PÁGINAS TOTALES',
+        'memory': 'MEMORIA INSUFICIENTE',
+        'corruption': 'ARCHIVO CORRUPTO',
+        'unknown': 'ERROR DESCONOCIDO'
+    };
+    
+    const categoryName = diagnostic ? categoryNames[diagnostic.category] || diagnostic.category.toUpperCase() : 'ERROR';
+    
     statusText.innerHTML = `
-        <div class="error-container">
-            <div class="error-icon">⚠️</div>
-            <div class="error-message">Error: ${errorMessage}</div>
-            <div class="error-suggestion">${suggestion}</div>
+        <div class="error-container ${severityClass}">
+            <div class="error-icon">${severityIcon}</div>
+            <div class="error-category">${categoryName}</div>
+            <div class="error-message">${error}</div>
+            <div class="error-recommendation">
+                <strong>💡 Solución:</strong> ${diagnostic ? diagnostic.recommendation : 'Intenta con archivos más pequeños'}
+            </div>
+            ${diagnostic && diagnostic.technicalDetails ? `
+                <details class="error-details">
+                    <summary>Detalles técnicos</summary>
+                    <pre>${diagnostic.technicalDetails}</pre>
+                </details>
+            ` : ''}
         </div>
     `;
     statusText.classList.remove('loading');
@@ -147,6 +184,75 @@ function handleError(error) {
     statusText.removeAttribute('aria-busy');
     mergeBtn.disabled = false;
     isProcessing = false;
+}
+
+// Manejo de resultados de diagnóstico
+function handleDiagnosticResults(data) {
+    console.log('Diagnostic results:', data);
+    
+    if (!data.canProcess) {
+        // Mostrar diagnóstico detallado de por qué no se puede procesar
+        let issuesHTML = '';
+        
+        // Problemas globales
+        if (data.globalIssues.length > 0) {
+            issuesHTML += '<div class="diagnostic-section"><h4>❌ Problemas Críticos:</h4><ul>';
+            data.globalIssues.forEach(issue => {
+                issuesHTML += `<li>${issue}</li>`;
+            });
+            issuesHTML += '</ul></div>';
+        }
+        
+        // Problemas por archivo
+        const problematicFiles = data.files.filter(f => !f.canProcess);
+        if (problematicFiles.length > 0) {
+            issuesHTML += '<div class="diagnostic-section"><h4>📄 Archivos Problemáticos:</h4>';
+            problematicFiles.forEach(file => {
+                issuesHTML += `<div class="file-diagnostic">
+                    <strong>${file.fileName}</strong> (${file.sizeMB}MB, ${file.pageCount} páginas)
+                    <ul class="file-issues">`;
+                file.issues.forEach(issue => {
+                    issuesHTML += `<li>${issue}</li>`;
+                });
+                issuesHTML += '</ul></div>';
+            });
+            issuesHTML += '</div>';
+        }
+        
+        // Advertencias
+        if (data.globalWarnings.length > 0) {
+            issuesHTML += '<div class="diagnostic-section"><h4>⚠️ Advertencias:</h4><ul>';
+            data.globalWarnings.forEach(warning => {
+                issuesHTML += `<li>${warning}</li>`;
+            });
+            issuesHTML += '</ul></div>';
+        }
+        
+        statusText.innerHTML = `
+            <div class="diagnostic-container">
+                <div class="diagnostic-header">
+                    <div class="diagnostic-icon">🩺</div>
+                    <div class="diagnostic-title">Diagnóstico Completo</div>
+                </div>
+                <div class="diagnostic-summary">
+                    📊 <strong>Resumen:</strong> ${data.totals.files} archivos, ${data.totals.pages} páginas, ${data.totals.sizeMB}MB total
+                    <br>💾 Memoria estimada: ${data.totals.memoryEstimateMB}MB
+                    <br>🎯 Estrategia recomendada: ${data.recommendedStrategy.toUpperCase()}
+                </div>
+                ${issuesHTML}
+                <div class="diagnostic-footer">
+                    <strong>💡 Recomendación:</strong> Corrige los problemas críticos antes de continuar.
+                </div>
+            </div>
+        `;
+        statusText.classList.add('diagnostic');
+        statusText.classList.remove('loading');
+        mergeBtn.disabled = true;
+        isProcessing = false;
+    } else {
+        // Mostrar diagnóstico positivo pero continuar con el procesamiento
+        console.log('Diagnóstico completado exitosamente, continuando...');
+    }
 }
 
 // Completar merge con estadísticas
