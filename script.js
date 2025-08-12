@@ -20,7 +20,7 @@ function initWorker() {
         worker.terminate();
     }
     
-    worker = new Worker('/workspace/worker.js');
+    worker = new Worker('worker.js');
     worker.onmessage = function(e) {
         const { type, data, error, stage, current, total, percentage, message } = e.data;
         
@@ -364,6 +364,9 @@ mergeBtn.addEventListener('click', async () => {
         handleError(error.message);
     }
 });
+
+// Configurar PDF.js worker
+pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
 // Inicializar worker al cargar la página
 document.addEventListener('DOMContentLoaded', () => {
