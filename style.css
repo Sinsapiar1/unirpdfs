@@ -119,6 +119,37 @@ h1 {
   .actions { grid-template-columns: 1fr; }
 }
 
+.options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+@media (max-width: 520px) {
+  .options { grid-template-columns: 1fr; }
+}
+
+.option-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text);
+}
+
+.option-item select {
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: inherit;
+}
+
+@media (prefers-color-scheme: dark) {
+  .option-item select { background: var(--surface); }
+}
+
 .preview-container {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));

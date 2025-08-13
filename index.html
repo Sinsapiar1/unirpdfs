@@ -37,6 +37,21 @@
             <input type="file" id="fileElem2" multiple accept="application/pdf" hidden />
         </div>
 
+        <div class="options">
+            <label class="option-item">
+                <input type="checkbox" id="compressToggle">
+                Reducir tamaño del PDF
+            </label>
+            <label class="option-item">
+                Nivel:
+                <select id="compressLevel" disabled>
+                    <option value="light">Ligero (mantener texto)</option>
+                    <option value="medium" selected>Medio (recomendado)</option>
+                    <option value="strong">Fuerte (máxima reducción)</option>
+                </select>
+            </label>
+        </div>
+
         <div id="preview-container" class="preview-container"></div>
 
         <button id="mergeBtn" class="btn" disabled>Unir PDFs</button>
