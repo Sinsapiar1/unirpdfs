@@ -187,7 +187,7 @@ app.post('/docx-to-pdf', upload.single('file'), async (req, res) => {
 	}
 });
 
-// PDF -> DOCX con pandoc
+// PDF -> DOCX via pdftohtml + pandoc (best-effort)
 app.post('/pdf-to-docx', upload.single('file'), async (req, res) => {
 	const jobId = String(req.headers['x-job-id'] || uuidv4());
 	const { outputName = 'output.docx' } = req.body || {};
@@ -196,11 +196,14 @@ app.post('/pdf-to-docx', upload.single('file'), async (req, res) => {
 		if (!req.file || !req.file.originalname.toLowerCase().endsWith('.pdf')) {
 			return res.status(400).json({ error: 'Sube un archivo .pdf' });
 		}
-		publishProgress(jobId, { percent: 15, status: 'Convirtiendo PDF a DOCX' });
 		const input = req.file.path;
+		const htmlPath = path.join(outputDir, 'temp.html');
 		const outputFile = path.join(outputDir, outputName);
-		const cmd = `pandoc '${input}' -o '${outputFile}'`;
-		await run(cmd);
+		publishProgress(jobId, { percent: 15, status: 'Extrayendo a HTML (pdftohtml)' });
+		// -s: single HTML; -i: ignore images behind text; -noframes: un solo archivo; -q: silencioso
+		await run(`pdftohtml -s -i -noframes -q '${input}' '${htmlPath}'`);
+		publishProgress(jobId, { percent: 70, status: 'Convirtiendo HTML a DOCX (pandoc)' });
+		await run(`pandoc '${htmlPath}' -o '${outputFile}'`);
 		publishProgress(jobId, { percent: 100, status: 'Completado', url: `/download/${jobId}/${path.basename(outputFile)}` });
 		endProgress(jobId);
 		return res.json({ jobId, url: `/download/${jobId}/${path.basename(outputFile)}` });

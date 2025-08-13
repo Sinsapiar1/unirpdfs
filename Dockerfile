@@ -10,7 +10,7 @@ ENV NODE_ENV=production
 # Dependencias del sistema
 RUN apt-get update && apt-get install -y \
     curl ca-certificates \
-    pdftk pandoc imagemagick default-jre \
+    pdftk pandoc imagemagick default-jre poppler-utils \
   && rm -rf /var/lib/apt/lists/*
 
 # Instalar Tabula (tabula-java) con fallback
