@@ -20,7 +20,7 @@ Instala dependencias nativas en Linux (Debian/Ubuntu):
 sudo apt-get update
 sudo apt-get install -y pdftk pandoc imagemagick default-jre curl
 # Tabula CLI (tabula-java jar)
-sudo curl -fL -o /usr/local/bin/tabula.jar https://github.com/tabulapdf/tabula-java/releases/download/v1.0.5/tabula-1.0.5.jar
+sudo curl -fL -o /usr/local/bin/tabula.jar https://github.com/tabulapdf/tabula-java/releases/download/v1.0.5/tabula-1.0.5-jar-with-dependencies.jar || sudo curl -fL -o /usr/local/bin/tabula.jar https://repo1.maven.org/maven2/technology/tabula/tabula/1.0.5/tabula-1.0.5-jar-with-dependencies.jar
 echo -e '#!/usr/bin/env bash\nexec java -jar /usr/local/bin/tabula.jar "$@"' | sudo tee /usr/local/bin/tabula >/dev/null
 sudo chmod +x /usr/local/bin/tabula
 ```

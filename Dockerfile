@@ -13,9 +13,10 @@ RUN apt-get update && apt-get install -y \
     pdftk pandoc imagemagick default-jre \
   && rm -rf /var/lib/apt/lists/*
 
-# Instalar Tabula (tabula-java) sin unzip
+# Instalar Tabula (tabula-java) con fallback
 RUN set -eux; \
-  curl -fL -o /usr/local/bin/tabula.jar https://github.com/tabulapdf/tabula-java/releases/download/v1.0.5/tabula-1.0.5.jar; \
+  curl -fL -o /usr/local/bin/tabula.jar https://github.com/tabulapdf/tabula-java/releases/download/v1.0.5/tabula-1.0.5-jar-with-dependencies.jar || \
+  curl -fL -o /usr/local/bin/tabula.jar https://repo1.maven.org/maven2/technology/tabula/tabula/1.0.5/tabula-1.0.5-jar-with-dependencies.jar; \
   printf '#!/usr/bin/env bash\nexec java -jar /usr/local/bin/tabula.jar "$@"' > /usr/local/bin/tabula; \
   chmod +x /usr/local/bin/tabula
 
