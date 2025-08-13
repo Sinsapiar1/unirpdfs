@@ -1,174 +1,95 @@
-# 📄 Unificador de PDFs - Versión Potenciada
+# Unificador de PDFs - Versión Potenciada (Servidor)
 
-Una aplicación web moderna y optimizada para unir documentos PDF directamente en el navegador, ahora con **soporte mejorado para documentos grandes** (500+ páginas).
+Aplicación web moderna que procesa archivos en el servidor usando herramientas de línea de comandos:
 
-## 🚀 Mejoras de Rendimiento Implementadas
+- pdftk (unión de PDFs)
+- pandoc (DOCX ⇄ PDF)
+- ImageMagick (JPG → PNG)
+- tabula (extracción de tablas PDF → CSV)
 
-### ✅ Problemas Resueltos
+## Estructura
 
-La aplicación original tenía problemas con documentos grandes que causaban:
-- ❌ Bloqueo de la interfaz de usuario
-- ❌ Consumo excesivo de memoria
-- ❌ Falta de retroalimentación al usuario
-- ❌ Procesamiento síncrono lento
+- `server/`: backend Express que recibe archivos, ejecuta comandos y sirve descargas
+- `client/`: frontend Vite con UI moderna y responsiva
 
-### 🔧 Soluciones Implementadas
+## Requisitos del sistema
 
-#### 1. **Web Workers** 🧵
-- **Procesamiento en segundo plano**: El merge de PDFs ahora se ejecuta en un hilo separado
-- **UI no bloqueante**: La interfaz permanece responsiva durante el procesamiento
-- **Mejor gestión de memoria**: Aislamiento del procesamiento pesado
+Instala dependencias nativas en Linux (Debian/Ubuntu):
 
-#### 2. **Procesamiento por Chunks** ⚡
-- **Páginas en lotes**: Procesa 10 páginas a la vez en lugar de todo el documento
-- **Pausas estratégicas**: Permite que otros procesos se ejecuten entre chunks
-- **Escalabilidad mejorada**: Maneja documentos de cualquier tamaño
-
-#### 3. **Indicadores de Progreso Detallados** 📊
-- **Progreso en tiempo real**: Muestra exactamente qué está haciendo la aplicación
-- **Porcentajes precisos**: Barra de progreso con animaciones fluidas
-- **Estados claros**: Carga → Procesamiento → Guardado
-
-#### 4. **Gestión de Memoria Optimizada** 💾
-- **Validación de archivos**: Límite de 100MB por archivo
-- **Carga lazy de previews**: Las previews se cargan de forma asíncrona
-- **Liberación automática**: Limpieza de recursos al finalizar
-
-#### 5. **Manejo de Errores Robusto** 🛡️
-- **Recuperación ante fallos**: La aplicación no se cuelga ante errores
-- **Mensajes informativos**: Explicaciones claras de los problemas
-- **Sugerencias de solución**: Guía al usuario sobre qué hacer
-
-## 🎯 Características Principales
-
-### Rendimiento
-- ✅ **Documentos grandes**: Maneja PDFs de 500+ páginas sin problemas
-- ✅ **Procesamiento no bloqueante**: La UI permanece responsiva
-- ✅ **Optimización de memoria**: Uso eficiente de recursos del navegador
-- ✅ **Progreso en tiempo real**: El usuario siempre sabe qué está pasando
-
-### Funcionalidad
-- 📁 **Drag & Drop**: Arrastra archivos directamente
-- 👁️ **Vista previa**: Miniatura de la primera página
-- 🗂️ **Múltiples archivos**: Agrega tantos PDFs como necesites
-- ❌ **Eliminación fácil**: Remueve archivos individuales
-- 📱 **Responsive**: Funciona en móviles y tablets
-
-### Seguridad y Privacidad
-- 🔒 **100% Cliente**: Todo el procesamiento ocurre en tu navegador
-- 🚫 **Sin uploads**: Tus archivos nunca salen de tu dispositivo
-- 🛡️ **Sin servidores**: No hay riesgo de filtración de datos
-
-## 🔧 Arquitectura Técnica
-
-### Componentes Principales
-
-1. **Worker.js**: Procesamiento en background
-   - Merge de PDFs con pdf-lib
-   - Procesamiento por chunks
-   - Comunicación con el hilo principal
-
-2. **Script.js**: Lógica principal
-   - Gestión de la UI
-   - Validación de archivos
-   - Comunicación con el worker
-
-3. **Style.css**: Interfaz moderna
-   - Indicadores de progreso animados
-   - Estados de error/éxito
-   - Responsive design
-
-### Flujo de Procesamiento
-
-```
-1. Usuario selecciona archivos
-   ↓
-2. Validación (tipo, tamaño)
-   ↓
-3. Generación de previews (async)
-   ↓
-4. Usuario inicia merge
-   ↓
-5. Archivos → Web Worker
-   ↓
-6. Procesamiento por chunks
-   ↓
-7. Progreso en tiempo real
-   ↓
-8. Archivo final generado
-   ↓
-9. Descarga disponible
+```bash
+sudo apt-get update
+sudo apt-get install -y pdftk pandoc imagemagick default-jre curl poppler-utils
+# Tabula CLI (tabula-java jar)
+sudo curl -fL -o /usr/local/bin/tabula.jar https://github.com/tabulapdf/tabula-java/releases/download/v1.0.5/tabula-1.0.5-jar-with-dependencies.jar || sudo curl -fL -o /usr/local/bin/tabula.jar https://repo1.maven.org/maven2/technology/tabula/tabula/1.0.5/tabula-1.0.5-jar-with-dependencies.jar
+echo -e '#!/usr/bin/env bash\nexec java -jar /usr/local/bin/tabula.jar "$@"' | sudo tee /usr/local/bin/tabula >/dev/null
+sudo chmod +x /usr/local/bin/tabula
 ```
 
-## 📈 Mejoras de Rendimiento
+Nota: `PDF → DOCX` usa `pdftohtml` (poppler-utils) + `pandoc`. La conversión es best-effort; los PDFs escaneados o muy complejos pueden dar resultados parciales.
 
-### Antes vs Después
+## Desarrollo
 
-| Aspecto | Antes | Después |
-|---------|-------|---------|
-| **Documentos grandes** | ❌ Se colgaba | ✅ Funciona perfectamente |
-| **Feedback al usuario** | ❌ "Uniendo PDFs..." | ✅ Progreso detallado |
-| **UI durante proceso** | ❌ Bloqueada | ✅ Responsiva |
-| **Manejo de errores** | ❌ Básico | ✅ Completo con sugerencias |
-| **Memoria** | ❌ Ineficiente | ✅ Optimizada |
-| **Previews** | ❌ Todas a la vez | ✅ Carga asíncrona |
+1) Backend
 
-### Métricas de Rendimiento
-
-- **Tiempo de respuesta**: 90% más rápido para documentos grandes
-- **Uso de memoria**: 60% menos consumo pico
-- **Experiencia de usuario**: Progreso visible en tiempo real
-- **Estabilidad**: 0% de cuelgues con los cambios implementados
-
-## 🚀 Uso
-
-1. **Abrir** la aplicación en tu navegador
-2. **Arrastrar** o seleccionar archivos PDF
-3. **Verificar** las previews generadas
-4. **Hacer clic** en "Unir PDFs"
-5. **Observar** el progreso en tiempo real
-6. **Descargar** el archivo unido
-
-## ⚙️ Configuración Técnica
-
-### Límites Configurables
-
-```javascript
-// En worker.js - Tamaño de chunk (páginas por lote)
-const chunkSize = 10; // Ajustable según hardware
-
-// En script.js - Límite de tamaño por archivo
-const maxFileSize = 100 * 1024 * 1024; // 100MB
+```bash
+cd server
+npm i
+npm run dev
 ```
 
-### Compatibilidad
+El servidor escucha en `http://localhost:4000`.
 
-- ✅ **Chrome 80+**
-- ✅ **Firefox 74+**
-- ✅ **Safari 13.1+**
-- ✅ **Edge 80+**
+2) Frontend
 
-## 🐛 Solución de Problemas
+```bash
+cd client
+npm i
+npm run dev
+```
 
-### Si la aplicación se ralentiza:
-1. Verifica que los archivos sean menores a 100MB cada uno
-2. Cierra otras pestañas del navegador para liberar memoria
-3. Intenta con menos archivos a la vez
+El frontend escucha en `http://localhost:5173` y llama a `http://localhost:4000`.
 
-### Si aparecen errores:
-1. Verifica que todos los archivos sean PDFs válidos
-2. Reinicia la página si persisten los problemas
-3. Usa archivos más pequeños si tienes limitaciones de memoria
+Puedes configurar `VITE_SERVER_URL` si el backend corre en otra URL.
 
-## 🔄 Próximas Mejoras
+## Endpoints
 
-- [ ] Soporte para reordenar archivos por drag & drop
-- [ ] Opción para seleccionar páginas específicas
-- [ ] Compresión automática del PDF final
-- [ ] Soporte para más formatos de entrada
+- `POST /merge-pdf` (multipart) `files[]` → JSON `{ url }`
+- `POST /docx-to-pdf` (multipart) `file` → JSON `{ url }`
+- `POST /pdf-to-docx` (multipart) `file` → JSON `{ url }`
+- `POST /pdf-to-excel` (multipart) `file` → JSON `{ url }`
+- `POST /jpg-to-png` (multipart) `file` → JSON `{ url }`
+- `GET /download/:jobId/:file` descarga archivo procesado
 
----
+## Notas de seguridad y producción
 
-**Desarrollado con ❤️ por Raul Jaime Pivet**
+- Valida extensiones y tipos MIME antes de procesar
+- Limita tamaño de archivos con Multer y servidor
+- Limpia directorios `uploads/` y `outputs/` con un job programado
+- Corre los binarios en sandbox (contenedor) si es posible
+- Detrás de un proxy inverso configura timeouts adecuados
 
-*Esta versión potenciada puede manejar documentos PDF de cualquier tamaño sin comprometer la experiencia del usuario.*
+## Licencia
+
+MIT
+
+## Despliegue con Docker
+
+Construir y ejecutar localmente:
+
+```bash
+# Construir imagen
+docker build -t pdf-power-tools:latest .
+# Ejecutar
+docker run --rm -p 4000:4000 pdf-power-tools:latest
+# Abrir: http://localhost:4000
+```
+
+## Despliegue desde GitHub
+
+- Al hacer push a `main`/`master`, el workflow `build-and-publish` construye el cliente, empaqueta todo en Docker y publica la imagen en GHCR: `ghcr.io/<owner>/<repo>:latest`.
+- Para desplegar en tu infraestructura (VPS/Kubernetes/Render/Fly.io), extrae esa imagen y ejecútala exponiendo el puerto 4000.
+
+```bash
+docker pull ghcr.io/<owner>/<repo>:latest
+docker run --rm -p 4000:4000 ghcr.io/<owner>/<repo>:latest
+```

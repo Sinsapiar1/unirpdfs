@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: unirpdfs-server
+    env: docker
+    plan: starter
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+    healthCheckPath: /health
+    dockerfilePath: ./Dockerfile
+    # Render configurará PORT automáticamente
