@@ -11,14 +11,13 @@ ENV NODE_ENV=production
 RUN apt-get update && apt-get install -y \
     curl ca-certificates \
     pdftk pandoc imagemagick default-jre \
-    wget unzip \
   && rm -rf /var/lib/apt/lists/*
-# Instalar Tabula CLI
-RUN wget -q -O /tmp/tabula.zip https://github.com/tabulapdf/tabula/releases/download/v1.2.1/tabula-1.2.1-jar.zip \
-  && unzip -o /tmp/tabula.zip -d /tmp/tabula >/dev/null \
-  && mv /tmp/tabula/tabula-1.2.1.jar /usr/local/bin/tabula.jar \
-  && printf '#!/usr/bin/env bash\nexec java -jar /usr/local/bin/tabula.jar \"$@\"' > /usr/local/bin/tabula \
-  && chmod +x /usr/local/bin/tabula
+
+# Instalar Tabula (tabula-java) sin unzip
+RUN set -eux; \
+  curl -fL -o /usr/local/bin/tabula.jar https://github.com/tabulapdf/tabula-java/releases/download/v1.0.5/tabula-1.0.5.jar; \
+  printf '#!/usr/bin/env bash\nexec java -jar /usr/local/bin/tabula.jar "$@"' > /usr/local/bin/tabula; \
+  chmod +x /usr/local/bin/tabula
 
 # Node
 RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \

@@ -18,11 +18,11 @@ Instala dependencias nativas en Linux (Debian/Ubuntu):
 
 ```bash
 sudo apt-get update
-sudo apt-get install -y pdftk pandoc imagemagick default-jre
-# Tabula CLI (si no está en repos):
-wget -O tabula.zip https://github.com/tabulapdf/tabula/releases/download/v1.2.1/tabula-1.2.1-jar.zip
-unzip tabula.zip -d tabula && sudo mv tabula/tabula-1.2.1.jar /usr/local/bin/tabula.jar
-sudo bash -lc 'echo -e "#!/usr/bin/env bash\nexec java -jar /usr/local/bin/tabula.jar \"$@\"" > /usr/local/bin/tabula && chmod +x /usr/local/bin/tabula'
+sudo apt-get install -y pdftk pandoc imagemagick default-jre curl
+# Tabula CLI (tabula-java jar)
+sudo curl -fL -o /usr/local/bin/tabula.jar https://github.com/tabulapdf/tabula-java/releases/download/v1.0.5/tabula-1.0.5.jar
+echo -e '#!/usr/bin/env bash\nexec java -jar /usr/local/bin/tabula.jar "$@"' | sudo tee /usr/local/bin/tabula >/dev/null
+sudo chmod +x /usr/local/bin/tabula
 ```
 
 Nota: En algunos sistemas ImageMagick usa `magick convert` en lugar de `convert`. Ajusta el comando en `server/src/index.js` si es tu caso.
