@@ -1,0 +1,36 @@
+# Etapa 1: build del frontend
+FROM node:22-alpine AS client-build
+WORKDIR /app
+COPY client/package*.json client/vite.config.js client/index.html client/main.js ./client/
+RUN cd client && npm ci && npm run build
+
+# Etapa 2: runtime
+FROM debian:stable-slim
+ENV NODE_ENV=production
+# Dependencias del sistema
+RUN apt-get update && apt-get install -y \
+    curl ca-certificates \
+    pdftk pandoc imagemagick default-jre \
+    wget unzip \
+  && rm -rf /var/lib/apt/lists/*
+# Instalar Tabula CLI
+RUN wget -q -O /tmp/tabula.zip https://github.com/tabulapdf/tabula/releases/download/v1.2.1/tabula-1.2.1-jar.zip \
+  && unzip -o /tmp/tabula.zip -d /tmp/tabula >/dev/null \
+  && mv /tmp/tabula/tabula-1.2.1.jar /usr/local/bin/tabula.jar \
+  && printf '#!/usr/bin/env bash\nexec java -jar /usr/local/bin/tabula.jar \"$@\"' > /usr/local/bin/tabula \
+  && chmod +x /usr/local/bin/tabula
+
+# Node
+RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
+  && apt-get update && apt-get install -y nodejs \
+  && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+COPY server/package*.json ./server/
+RUN cd server && npm ci --only=production
+COPY server/src ./server/src
+# Copiar build del cliente
+COPY --from=client-build /app/client/dist ./client/dist
+
+EXPOSE 4000
+CMD ["node", "server/src/index.js"]

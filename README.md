@@ -71,3 +71,25 @@ Puedes configurar `VITE_SERVER_URL` si el backend corre en otra URL.
 ## Licencia
 
 MIT
+
+## Despliegue con Docker
+
+Construir y ejecutar localmente:
+
+```bash
+# Construir imagen
+docker build -t pdf-power-tools:latest .
+# Ejecutar
+docker run --rm -p 4000:4000 pdf-power-tools:latest
+# Abrir: http://localhost:4000
+```
+
+## Despliegue desde GitHub
+
+- Al hacer push a `main`/`master`, el workflow `build-and-publish` construye el cliente, empaqueta todo en Docker y publica la imagen en GHCR: `ghcr.io/<owner>/<repo>:latest`.
+- Para desplegar en tu infraestructura (VPS/Kubernetes/Render/Fly.io), extrae esa imagen y ejecútala exponiendo el puerto 4000.
+
+```bash
+docker pull ghcr.io/<owner>/<repo>:latest
+docker run --rm -p 4000:4000 ghcr.io/<owner>/<repo>:latest
+```

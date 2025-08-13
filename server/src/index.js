@@ -265,6 +265,15 @@ app.post('/jpg-to-png', upload.single('file'), async (req, res) => {
 // Descargas
 app.use('/download', express.static(OUTPUT_ROOT, { fallthrough: false }));
 
+// Servir frontend (build de Vite) si existe
+const CLIENT_DIST = path.join(__dirname, '..', '..', 'client', 'dist');
+if (fs.existsSync(CLIENT_DIST)) {
+	app.use(express.static(CLIENT_DIST));
+	app.get('/', (req, res) => {
+		res.sendFile(path.join(CLIENT_DIST, 'index.html'));
+	});
+}
+
 const PORT = process.env.PORT || 4000;
 app.listen(PORT, () => {
 	console.log(`Servidor escuchando en http://localhost:${PORT}`);
